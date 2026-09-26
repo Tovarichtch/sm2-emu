@@ -845,6 +845,9 @@
     <title>Daytona USA</title>
     <manufacturer>Sega</manufacturer>
     <year>1994</year>
+    <devices>
+      <device name="model1io"/>
+    </devices>
 
     <inputs>
       <input type="common"/>
@@ -858,8 +861,8 @@
       <channel index="2" control="brake" rest="0x00"/>
     </analog>
 
-    <!-- Model 1 I/O board Z80 firmware. Bundled into this archive (the
-         ioboard region below), so no separate device set is needed. -->
+    <!-- Model 1 I/O board Z80 firmware: in the game's archive, or in
+         model1io.zip for a split set. -->
     <roms>
       <region name="ioboard" size="0x10000">
         <file name="epr-14869c.25" offset="0x000000" crc="0x24b68e64"/>
@@ -1263,6 +1266,9 @@
     <title>Desert Tank</title>
     <manufacturer>Sega / Martin Marietta</manufacturer>
     <year>1994</year>
+    <devices>
+      <device name="model1io"/>
+    </devices>
 
     <inputs>
       <input type="common"/>
@@ -1278,8 +1284,8 @@
       <channel index="2" control="sticky" rest="0x80"/>
     </analog>
 
-    <!-- Model 1 I/O board Z80 firmware. Bundled into this archive (the
-         ioboard region below), so no separate device set is needed. -->
+    <!-- Model 1 I/O board Z80 firmware: in the game's archive, or in
+         model1io.zip for a split set. -->
     <roms>
       <region name="ioboard" size="0x10000">
         <file name="epr-14869c.25" offset="0x000000" crc="0x24b68e64"/>
@@ -5084,8 +5090,8 @@
       <axis name="p2x" min="0x080" max="0x273" rest="0x179"/>
     </lightgun>
 
-    <!-- Model 1 I/O board (type 2) Z80 firmware. Bundled into this
-         archive (the ioboard region below); no device set needed. -->
+    <!-- Model 1 I/O board (type 2) Z80 firmware: in the game's archive, or
+         in model1io2.zip for a split set. -->
     <roms>
       <region name="ioboard" size="0x10000">
         <file name="epr-17181.6" offset="0x000000" crc="0x1add2b82"/>

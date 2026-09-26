@@ -636,7 +636,9 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
                       "expected chips were found, not that the name is wrong.");
             return std::nullopt;
         }
-        if (!best_score.complete()) {
+        // A parent or device set may still supply the gap; if not, the missing
+        // files are listed individually during assembly.
+        if (!best_score.complete() && best->parent.empty() && best->device_sets.empty()) {
             SM2_WARN("'%s' looks like '%s' but %u required file(s) are missing",
                      archive_path.c_str(), best->name.c_str(), best_score.missing);
         }
@@ -679,10 +681,13 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
     }
 
     // -- open any device ROM sets ------------------------------------------
-    // Unlike the parent archive these are opened unconditionally: the firmware
-    // in them belongs to a device the board carries, so it is never present in
-    // the game's own archive and scoring the game would not reveal the need.
+    // Device firmware (the I/O board's Z80 program) is bundled into most game
+    // archives but lives only in the device set in a MAME split set, so a
+    // device set is read only when the game is still short of files.
     for (const std::string& device_set : chosen->device_sets) {
+        if (score_game(archives, *chosen).complete()) {
+            break;
+        }
         if (const auto device_path = find_sibling_archive(device_set)) {
             SM2_INFO("'%s' needs the '%s' device set; also reading %s",
                      chosen->name.c_str(), device_set.c_str(),
@@ -691,9 +696,10 @@ std::optional<LoadResult> RomLoader::load(const GameDatabase& database,
                 return std::nullopt;
             }
         } else {
-            SM2_WARN("'%s' needs the '%s' device ROM set, but no %s.zip or %s.7z "
-                     "was found beside the archive", chosen->name.c_str(),
-                     device_set.c_str(), device_set.c_str(), device_set.c_str());
+            SM2_WARN("'%s' is missing files that the '%s' device ROM set holds, but "
+                     "no %s.zip or %s.7z was found beside the archive",
+                     chosen->name.c_str(), device_set.c_str(), device_set.c_str(),
+                     device_set.c_str());
         }
     }
 
