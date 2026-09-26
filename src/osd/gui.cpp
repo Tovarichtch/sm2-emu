@@ -636,6 +636,12 @@ void Gui::draw_settings(Config& config, const std::vector<std::string>& gpu_name
             ImGui::EndTabItem();
         }
 
+        // -- Audio tab -----------------------------------------------------
+        if (ImGui::BeginTabItem("Audio")) {
+            draw_audio_tab(config);
+            ImGui::EndTabItem();
+        }
+
         // -- Paths tab -----------------------------------------------------
         if (ImGui::BeginTabItem("Paths")) {
             const auto dir_field = [this](const char* label, const char* id,
@@ -1061,6 +1067,134 @@ void Gui::draw_gamepad_tab(Config& config, Input* input)
         strength = ((strength + 5) / 10) * 10;  // snap to 10 % steps
         config.pad_rumble_strength = static_cast<u32>(std::clamp(strength, 0, 100));
     }
+    ImGui::EndDisabled();
+}
+
+// ---------------------------------------------------------------------------
+// Audio tab
+// ---------------------------------------------------------------------------
+
+bool Gui::draw_volume_slider(Config& config, const VolumeFamily& family)
+{
+    const auto found = config.game_volumes.find(family.key);
+    const u32  current =
+        found != config.game_volumes.end() ? found->second : Config::kDefaultGameVolume;
+
+    ImGui::PushID(family.key.c_str());
+    bool changed = false;
+    int  percent = static_cast<int>(current);
+    ImGui::SetNextItemWidth(-90.0f);
+    if (ImGui::SliderInt("##volume", &percent, 0,
+                         static_cast<int>(Config::kMaxGameVolume), "%d%%")) {
+        percent = ((percent + 2) / 5) * 5;  // snap to 5 % steps
+        changed = true;
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(current == Config::kDefaultGameVolume);
+    if (ImGui::Button("Reset")) {
+        percent = static_cast<int>(Config::kDefaultGameVolume);
+        changed = true;
+    }
+    ImGui::EndDisabled();
+    ImGui::PopID();
+
+    if (changed) {
+        const u32 value = static_cast<u32>(
+            std::clamp(percent, 0, static_cast<int>(Config::kMaxGameVolume)));
+        // 100 is stored as no entry, so the ini lists only changed families.
+        if (value == Config::kDefaultGameVolume) {
+            config.game_volumes.erase(family.key);
+        } else {
+            config.game_volumes[family.key] = value;
+        }
+    }
+    return changed;
+}
+
+void Gui::draw_audio_tab(Config& config)
+{
+    ImGui::Checkbox("Per-game volume", &config.game_volume);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Raise or lower a game's volume from its default level.\n"
+                          "One slider covers every revision of a game. Off plays\n"
+                          "every game at its default, whatever the sliders say.\n"
+                          "\n"
+                          "Warning: above 100%% loud effects can clip (audible\n"
+                          "distortion).");
+    }
+    ImGui::Spacing();
+
+    ImGui::BeginDisabled(!config.game_volume);
+
+    // The running game's slider first.
+    const VolumeFamily* playing = nullptr;
+    for (const VolumeFamily& family : m_volume_families) {
+        if (family.key == m_current_volume_family) {
+            playing = &family;
+            break;
+        }
+    }
+    if (playing != nullptr) {
+        ImGui::Text("Now playing: %s", playing->title.c_str());
+        draw_volume_slider(config, *playing);
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+    }
+
+    ImGui::SetNextItemWidth(260.0f);
+    ImGui::InputTextWithHint("##volume_filter", "Filter games", m_volume_filter,
+                             sizeof(m_volume_filter));
+    ImGui::SameLine();
+    const bool any_changed = !config.game_volumes.empty();
+    ImGui::BeginDisabled(!any_changed);
+    if (ImGui::Button("Reset all")) {
+        config.game_volumes.clear();
+    }
+    ImGui::EndDisabled();
+
+    std::string filter = m_volume_filter;
+    std::transform(filter.begin(), filter.end(), filter.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+    // Leave room for the Save row below the tabs.
+    const ImGuiStyle& style  = ImGui::GetStyle();
+    const float       footer = ImGui::GetFrameHeightWithSpacing() + style.ItemSpacing.y * 2.0f;
+    const float       height = std::max(ImGui::GetContentRegionAvail().y - footer,
+                                        ImGui::GetFrameHeightWithSpacing() * 4.0f);
+
+    constexpr ImGuiTableFlags kFlags = ImGuiTableFlags_ScrollY | ImGuiTableFlags_RowBg
+                                     | ImGuiTableFlags_BordersInnerH
+                                     | ImGuiTableFlags_SizingStretchProp;
+    if (ImGui::BeginTable("volumes", 2, kFlags, ImVec2(0.0f, height))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Game", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+        ImGui::TableSetupColumn("Volume", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+        ImGui::TableHeadersRow();
+
+        for (const VolumeFamily& family : m_volume_families) {
+            if (!filter.empty()) {
+                std::string haystack = family.title + " " + family.key;
+                std::transform(haystack.begin(), haystack.end(), haystack.begin(),
+                               [](unsigned char c) {
+                                   return static_cast<char>(std::tolower(c));
+                               });
+                if (haystack.find(filter) == std::string::npos) {
+                    continue;
+                }
+            }
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(family.title.c_str());
+            ImGui::TableNextColumn();
+            draw_volume_slider(config, family);
+        }
+        ImGui::EndTable();
+    }
+
     ImGui::EndDisabled();
 }
 
@@ -1787,6 +1921,9 @@ void Gui::hide_picker()
 void Gui::enable_picker(std::vector<PickerEntry> entries, render::Backend* backend,
                         Scraper* scraper)
 {
+    // Free the old art or every rescan leaks a full set of textures.
+    release_picker_textures();
+
     m_picker_entries  = std::move(entries);
     m_picker_backend  = backend;
     m_picker_scraper  = scraper;

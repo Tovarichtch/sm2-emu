@@ -649,6 +649,18 @@ bool load_config(const std::string& path, Config* out, std::vector<std::string>*
                 problems->push_back(path + ":" + std::to_string(number)
                                     + ": unknown setting '" + key + "'");
             }
+        } else if (key == "game_volume") {
+            if (!parse_bool(value, &out->game_volume)) {
+                bad_value();
+            }
+        } else if (key.rfind("volume_", 0) == 0 && key.size() > 7) {
+            u32 percent = 0;
+            if (parse_u32(value, &percent)) {
+                out->game_volumes[key.substr(7)] =
+                    std::min(percent, Config::kMaxGameVolume);
+            } else {
+                bad_value();
+            }
         } else if (key == "rom_dir") {
             out->rom_dir = value;
         } else if (key == "nvram_dir") {
@@ -863,6 +875,15 @@ bool save_config(const std::string& path, const Config& config)
         for (u32 r = 0; r < Config::kGunRoleCount; ++r) {
             out << "gun" << (p + 1) << "_button_" << kGunRoleNames[r] << " = "
                 << config.gun_buttons[p][r] << "\n";
+        }
+    }
+    out << "\n"
+        << "# Per-game volume, 0..150 percent of the default (100). One\n"
+        << "# volume_<parent set> line per game family, e.g. volume_srallyc.\n"
+        << "game_volume = " << bool_text(config.game_volume) << "\n";
+    for (const auto& [family, percent] : config.game_volumes) {
+        if (percent != Config::kDefaultGameVolume) {
+            out << "volume_" << family << " = " << percent << "\n";
         }
     }
     out << "\n"

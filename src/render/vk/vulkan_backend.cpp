@@ -327,9 +327,6 @@ bool VulkanBackend::init_overlay(osd::Gui& /*gui*/)
 {
     m_overlay_target_format = m_context.swapchain_format();
 
-    // ImGui's own font set plus one AddTexture set per picker tile's art. 256
-    // covers a screen of tiles with headroom.
-    constexpr u32 kOverlayDescriptorSets = 256;
     VkDescriptorPoolSize pool_sizes[] = {
         {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, kOverlayDescriptorSets},
     };
@@ -440,6 +437,18 @@ void VulkanBackend::shutdown_overlay()
 Backend::TextureHandle VulkanBackend::create_texture(u32 w, u32 h, const u8* rgba)
 {
     if (w == 0 || h == 0 || rgba == nullptr || !m_overlay_renderer_ready) {
+        return 0;
+    }
+
+    // ImGui_ImplVulkan_AddTexture crashes in the driver on an exhausted pool
+    // rather than failing, so refuse first. Retired textures still hold sets.
+    if (m_textures.size() + m_texture_graveyard.size() + kOverlayReservedSets
+        >= kOverlayDescriptorSets) {
+        if (!m_warned_overlay_pool_full) {
+            m_warned_overlay_pool_full = true;
+            SM2_WARN("overlay: texture pool full (%u sets); skipping further art",
+                     kOverlayDescriptorSets);
+        }
         return 0;
     }
 

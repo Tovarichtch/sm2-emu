@@ -105,6 +105,22 @@ public:
     };
     void set_link_status(const LinkStatus& status) { m_link_status = status; }
 
+    // -- per-game volume ---------------------------------------------------
+
+    /// One Audio-tab row: a game family, keyed by its parent set name.
+    struct VolumeFamily {
+        std::string key;    ///< parent set name, the Config::game_volumes key
+        std::string title;  ///< the parent's title, shown on the row
+    };
+
+    void set_volume_families(std::vector<VolumeFamily> families)
+    {
+        m_volume_families = std::move(families);
+    }
+
+    /// The running game's family, empty when none is loaded.
+    void set_current_volume_family(std::string key) { m_current_volume_family = std::move(key); }
+
     // -- save states -------------------------------------------------------
 
     /// One save-state slot for the States tab, fed each frame so the GUI need
@@ -226,6 +242,8 @@ private:
     void draw_lightgun_tab(Config& config, class Input* input);
     void draw_network_tab(Config& config);
     void draw_states_tab();
+    void draw_audio_tab(Config& config);
+    bool draw_volume_slider(Config& config, const VolumeFamily& family);
     void draw_dir_picker_popup(Config& config);
     void draw_status_bar(float measured_hz);
     void draw_fps_overlay(float measured_hz, const char* renderer_label);
@@ -285,6 +303,11 @@ private:
 
     // -- cabinet link status -----------------------------------------------
     LinkStatus m_link_status;
+
+    // -- per-game volume (Audio tab) ---------------------------------------
+    std::vector<VolumeFamily> m_volume_families;
+    std::string               m_current_volume_family;
+    char                      m_volume_filter[64] = {};
 
     // -- save-state slots (States tab) -------------------------------------
     bool                        m_state_game_loaded = false;

@@ -130,6 +130,12 @@ private:
     EnhancementOptions m_enhancement_options;
 
     // -- ImGui's Vulkan renderer backend -------------------------------------
+    /// Overlay pool size: room for two full sets of picker art, since a rescan
+    /// loads the new set while the old one is still retiring.
+    static constexpr u32 kOverlayDescriptorSets = 1024;
+    /// Kept back for ImGui's font atlas.
+    static constexpr u32 kOverlayReservedSets = 16;
+
     VkDescriptorPool m_overlay_pool             = VK_NULL_HANDLE;
     VkFormat         m_overlay_target_format    = VK_FORMAT_UNDEFINED;
     bool             m_overlay_renderer_ready    = false;
@@ -162,6 +168,7 @@ private:
     std::unordered_map<Backend::TextureHandle, OverlayTexture> m_textures;
     std::vector<RetiredTexture>                          m_texture_graveyard;
     std::vector<RetiredStaging>                          m_staging_graveyard;
+    bool                                                 m_warned_overlay_pool_full = false;
 
     void reclaim_retired_textures();
     void free_overlay_texture(OverlayTexture& texture);

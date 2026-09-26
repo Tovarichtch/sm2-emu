@@ -47,6 +47,7 @@
 #include "rom/game_db.h"
 #include "rom/rom_loader.h"
 
+#include <map>
 #include <memory>
 
 #include <SDL3/SDL.h>
@@ -54,6 +55,7 @@
 #include <imgui_impl_sdl3.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -63,6 +65,7 @@
 #include <set>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #if !defined(SM2_HAVE_VULKAN)
@@ -597,6 +600,52 @@ void print_usage()
 /// concrete downcasts are kept because the boot-test diagnostics and copro
 /// self-test need a specific board's registers. Audio is not opened here: the
 /// boot-test path needs a machine but no audio, so the caller opens it.
+/// The key a game's volume is stored under, shared by every revision.
+[[nodiscard]] std::string volume_family(const sm2::rom::GameSpec& game)
+{
+    // Separate parents that share one slider.
+    static const std::map<std::string, std::string> kSharedFamily = {
+        {"zeroguna", "zerogun"},
+        {"dynabb97", "dynabb"},
+    };
+    const std::string& parent = game.parent.empty() ? game.name : game.parent;
+    const auto shared = kSharedFamily.find(parent);
+    return shared != kSharedFamily.end() ? shared->second : parent;
+}
+
+/// "Sega Rally Championship - Twin/DX" -> "Sega Rally Championship".
+[[nodiscard]] std::string game_title_without_cabinet(std::string title)
+{
+    static constexpr std::array<std::string_view, 4> kCabinets = {"Twin", "DX", "Deluxe",
+                                                                   "Relay"};
+    const auto is_separator = [](char c) { return c == ' ' || c == '-' || c == '/'; };
+    for (bool stripped = true; stripped;) {
+        stripped = false;
+        for (const std::string_view cabinet : kCabinets) {
+            if (title.size() > cabinet.size() && title.ends_with(cabinet)
+                && is_separator(title[title.size() - cabinet.size() - 1])) {
+                title.resize(title.size() - cabinet.size());
+                while (!title.empty() && is_separator(title.back())) {
+                    title.pop_back();
+                }
+                stripped = true;
+            }
+        }
+    }
+    return title;
+}
+
+/// Scale interleaved samples by `percent` of full level, saturating.
+void apply_volume(std::span<const sm2::s16> in, sm2::u32 percent, std::vector<sm2::s16>* out)
+{
+    out->resize(in.size());
+    for (sm2::usize index = 0; index < in.size(); ++index) {
+        const sm2::s32 scaled = static_cast<sm2::s32>(in[index])
+                              * static_cast<sm2::s32>(percent) / 100;
+        (*out)[index] = static_cast<sm2::s16>(std::clamp(scaled, -32768, 32767));
+    }
+}
+
 struct LoadedMachine {
     sm2::rom::GameSpec                          game;
     std::unique_ptr<sm2::hw::Model2MachineBase> machine_iface;
@@ -1777,6 +1826,31 @@ int main(int argc, char** argv)
             }
             gui.set_available_renderers(std::move(renderers));
         }
+        {
+            // One Audio-tab row per family, titled after its parent set.
+            // Families that do not run (`preliminary` includes DOA, which does).
+            static const std::set<std::string> kNoVolume = {"rascot2"};
+            std::map<std::string, std::string> titles;
+            for (const rom::GameSpec& game : database.games()) {
+                const std::string family = volume_family(game);
+                if (kNoVolume.count(family) != 0) {
+                    continue;
+                }
+                if (game.name == family || titles.find(family) == titles.end()) {
+                    titles[family] = game.title;
+                }
+            }
+            std::vector<osd::Gui::VolumeFamily> families;
+            for (auto& [key, title] : titles) {
+                const std::string shown = game_title_without_cabinet(title);
+                families.push_back({key, shown.empty() ? key : shown});
+            }
+            std::sort(families.begin(), families.end(),
+                      [](const osd::Gui::VolumeFamily& a, const osd::Gui::VolumeFamily& b) {
+                          return a.title < b.title;
+                      });
+            gui.set_volume_families(std::move(families));
+        }
         if (!gui.init(window.handle())) {
             SM2_ERROR("could not initialise the GUI overlay");
             SDL_Quit();
@@ -1904,6 +1978,7 @@ int main(int argc, char** argv)
 
         /// Everything the sound board produced, when --dump-audio was given.
         std::vector<s16> recorded_audio;
+        std::vector<s16> scaled_audio;  ///< the per-game volume's scratch buffer
 
         // Per-stage CPU timers for --profile. Built regardless of
         // options.profile -- maybe_scope() below makes recording a no-op when
@@ -2264,7 +2339,13 @@ int main(int argc, char** argv)
                 // board is not emulated.
                 if (sound_board != nullptr) {
                     const std::span<const s16> produced = sound_board->pending_samples();
-                    audio.submit(produced);
+                    const u32 volume = options.config.volume_for(volume_family(loaded->game));
+                    if (volume == Config::kDefaultGameVolume) {
+                        audio.submit(produced);
+                    } else {
+                        apply_volume(produced, volume, &scaled_audio);
+                        audio.submit(scaled_audio);
+                    }
                     if (!options.dump_audio.empty()) {
                         recorded_audio.insert(recorded_audio.end(), produced.begin(),
                                               produced.end());
@@ -2546,6 +2627,8 @@ int main(int argc, char** argv)
             } else {
                 gui.set_state_slots(machine_iface != nullptr, {});
             }
+            gui.set_current_volume_family(loaded.has_value() ? volume_family(loaded->game)
+                                                             : std::string());
             const bool gui_active =
                 gui.draw(options.config, gpu_names, pacer.measured_hz(),
                         use_software_renderer ? "Software" : gpu_backend_name, &input);

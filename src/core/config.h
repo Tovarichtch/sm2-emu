@@ -18,6 +18,7 @@
 #include "core/types.h"
 
 #include <array>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -257,6 +258,27 @@ struct Config {
         {0x110u,   0x111u,  0x101u,  0x102u,  0x105u,  0x106u,  0x107u,  0x108u},
         {0x110u,   0x111u,  0x101u,  0x102u,  0x105u,  0x106u,  0x107u,  0x108u},
     }};
+
+    // -- audio -------------------------------------------------------------
+
+    /// Per-game volume; off plays every game at its default level.
+    bool game_volume = false;
+
+    /// Percent per game family, keyed by parent set name; absent means 100.
+    std::map<std::string, u32> game_volumes;
+
+    static constexpr u32 kDefaultGameVolume = 100;
+    static constexpr u32 kMaxGameVolume     = 150;
+
+    /// The volume to apply to `family` now.
+    [[nodiscard]] u32 volume_for(const std::string& family) const
+    {
+        if (!game_volume) {
+            return kDefaultGameVolume;
+        }
+        const auto found = game_volumes.find(family);
+        return found != game_volumes.end() ? found->second : kDefaultGameVolume;
+    }
 
     // -- cabinet link (networking) -----------------------------------------
 
