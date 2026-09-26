@@ -551,10 +551,12 @@ void SHARC::POP_STATUS_STACK()
 // Circular buffer update
 // ============================================================================
 
+// The ADSP-2106x circular buffer occupies [B, B+L), so a post-modified index that
+// reaches B+L wraps.
 void SHARC::update_circular_buffer_pm(int i)
 {
     if (m_dag2.l[i] != 0) {
-        if (m_dag2.i[i] > m_dag2.b[i] + m_dag2.l[i])
+        if (m_dag2.i[i] >= m_dag2.b[i] + m_dag2.l[i])
             m_dag2.i[i] -= m_dag2.l[i];
         else if (m_dag2.i[i] < m_dag2.b[i])
             m_dag2.i[i] += m_dag2.l[i];
@@ -564,7 +566,7 @@ void SHARC::update_circular_buffer_pm(int i)
 void SHARC::update_circular_buffer_dm(int i)
 {
     if (m_dag1.l[i] != 0) {
-        if (m_dag1.i[i] > m_dag1.b[i] + m_dag1.l[i])
+        if (m_dag1.i[i] >= m_dag1.b[i] + m_dag1.l[i])
             m_dag1.i[i] -= m_dag1.l[i];
         else if (m_dag1.i[i] < m_dag1.b[i])
             m_dag1.i[i] += m_dag1.l[i];
