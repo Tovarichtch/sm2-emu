@@ -177,7 +177,8 @@ struct Config {
     u32 wheel_ffb_strength = 30;
 
     /// A synthesised road/engine rumble: a vibration that rises with the
-    /// throttle and with hard steering. Independent of the centring resistance.
+    /// throttle and with hard steering. Used on games without force feedback;
+    /// a wheel delivering force feedback does not also rumble.
     bool wheel_rumble = true;
 
     /// Rumble strength, 0..100 percent.

@@ -833,6 +833,12 @@ void Input::update_drive_board(const rom::GameSpec& game, std::span<const u8> wr
     }
 }
 
+bool Input::wheel_ffb_active(const rom::GameSpec& game) const
+{
+    return m_wheel.handle != nullptr && m_wheel.ffb && m_wheel_settings.ffb
+        && game.drive_board && m_wheel.steer_axis >= 0;
+}
+
 void Input::update_force_feedback(const rom::GameSpec& game)
 {
     if (m_wheel.handle == nullptr) {
@@ -843,7 +849,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
     const DriveCommand& command = m_drive_command;
     int level  = 0;
     int rumble = 0;   // sine magnitude, felt as vibration rather than a push
-    if (game.has_steering() && m_wheel_settings.ffb && m_wheel.steer_axis >= 0) {
+    if (wheel_ffb_active(game)) {
         const int ceiling = static_cast<int>(
             std::clamp(m_wheel_settings.strength, 0u, 100u) * 32767 / 100);
         const int mag = command.strength * ceiling / kDriveFull;
@@ -933,6 +939,15 @@ void Input::update_force_feedback(const rom::GameSpec& game)
         level = std::clamp(baseline + game_force, -ceiling, ceiling);
     }
 
+    // Without force feedback, the game's impacts come through as rumble instead.
+    const bool ffb_active = wheel_ffb_active(game);
+    if (!ffb_active && game.has_steering() && m_wheel_settings.rumble
+        && (command.is_push() || command.effect == DriveCommand::Effect::Vibrate)) {
+        const int ceiling = static_cast<int>(
+            std::clamp(m_wheel_settings.rumble_strength, 0u, 100u) * 16383 / 100);
+        rumble = std::max(rumble, command.strength * ceiling / kDriveFull);
+    }
+
     // Boost the impact rumble so a hit is clearly felt.
     rumble *= 2;
 
@@ -942,7 +957,8 @@ void Input::update_force_feedback(const rom::GameSpec& game)
     // gas. This is a feel, not replayed game data, with its own on/off + strength.
     // Kept deliberately subtle: even at full strength it is a fraction of the
     // device maximum, so it reads as an engine hum rather than a jackhammer.
-    if (game.has_steering() && m_wheel_settings.rumble && m_wheel.accel_axis >= 0) {
+    if (!ffb_active && game.has_steering() && m_wheel_settings.rumble
+        && m_wheel.accel_axis >= 0) {
         // Full strength maps to ~12% of the device max at full throttle; the
         // G923's motor is strong, so even a small sine magnitude is plenty.
         const int rmax = static_cast<int>(
@@ -961,7 +977,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
     // Smooth it: a trigger is a single-frame spike, so decay the running
     // magnitude and hold it a few frames into a sustained felt vibration.
     int rumble_now = std::max(rumble, (m_wheel.rumble_mag < 0 ? 0 : m_wheel.rumble_mag) * 4 / 5);
-    rumble_now     = std::clamp(rumble_now, 0, 32767);
+    rumble_now     = ffb_active ? 0 : std::clamp(rumble_now, 0, 32767);
 
     constexpr int kFeltChange = 256;
     const auto worth_sending = [](int want, int sent) {
@@ -1008,7 +1024,11 @@ void Input::update_pad_rumble(const rom::GameSpec& game)
 
     const int ceiling = static_cast<int>(
         std::clamp(m_pad_rumble_strength, 0u, 100u) * 65535 / 100);
-    const bool active = m_pad_rumble_enabled && game.has_steering();
+    const bool active = m_pad_rumble_enabled && game.has_steering() && !wheel_ffb_active(game);
+    if (!active) {
+        m_pad_rumble_hold = 0;
+        m_pad_rumble_level = 0;
+    }
 
     // Jolts: the drive board's pushes and vibration, which are short bursts, not a held force.
     const DriveCommand& command = m_drive_command;

@@ -858,14 +858,13 @@ void Gui::draw_wheel_tab(Config& config, Input* input)
     ImGui::EndDisabled();
 
     // Synthetic engine/road rumble, since the game streams no continuous buzz.
-    // Stands on its own: a wheel with no usable force feedback can still rumble.
     ImGui::Checkbox("Rumble", &config.wheel_rumble);
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
     if (ImGui::IsItemHovered()) {
         ImGui::SetTooltip("A synthesised engine/road vibration that rises with\n"
-                          "the throttle. Daytona sends no continuous rumble, so\n"
-                          "this is a feel added on top, not game data.");
+                          "the throttle, plus the game's impacts. Used on games\n"
+                          "without force feedback; never at the same time as it.");
     }
     ImGui::BeginDisabled(!config.wheel_rumble);
     int rumble = static_cast<int>(config.wheel_rumble_strength);
