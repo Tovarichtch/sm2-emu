@@ -387,6 +387,8 @@ bool GameDatabase::load(const std::string& path)
             || !attribute_bool(game_node, "gun_missile", false, &game.gun_missile,
                                context.c_str())
             || !attribute_integer(game_node, "start_gear", 1, &game.start_gear,
+                                  context.c_str())
+            || !attribute_integer(game_node, "texture_wait", 0, &game.texture_wait,
                                   context.c_str())) {
             return false;
         }
@@ -746,6 +748,7 @@ bool GameDatabase::merge_clones(const std::set<std::string>& board_inherited)
         if (!game.lightgun.present)    { game.lightgun = parent.lightgun; }
         if (!game.gearbox)             { game.gearbox = parent.gearbox; }
         if (game.start_gear == 1)      { game.start_gear = parent.start_gear; }
+        if (game.texture_wait == 0)    { game.texture_wait = parent.texture_wait; }
         if (!game.shift_buttons)       { game.shift_buttons = parent.shift_buttons; }
         if (!game.drive_board)         { game.drive_board = parent.drive_board; }
         if (game.drive_protocol == DriveProtocol::Daytona) {

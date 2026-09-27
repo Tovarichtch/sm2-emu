@@ -857,10 +857,12 @@ Model2B::Window Model2B::resolve(u32 address)
     // halves every destination address and drops the upper half of each sheet,
     // which is what was streaking Wave Runner's textures.
     if (in_mirrored(address, kTextureRam0, 0x100000, 0x100000)) {
+        m_cpu.add_wait_cycles(static_cast<s32>(m_game.texture_wait));
         return window(m_texture_ram0, address & 0xfffff, true, cpu::kBusFlagBurst,
                       Notify::TextureRam);
     }
     if (in_mirrored(address, kTextureRam1, 0x100000, 0x100000)) {
+        m_cpu.add_wait_cycles(static_cast<s32>(m_game.texture_wait));
         return window(m_texture_ram1, address & 0xfffff, true, cpu::kBusFlagBurst,
                       Notify::TextureRam);
     }

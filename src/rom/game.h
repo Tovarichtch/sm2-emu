@@ -308,6 +308,10 @@ struct GameSpec {
     /// gear; Sega Rally counts down from a standstill and wants 1st.
     u32 start_gear = 1;
 
+    /// Wait cycles per texture RAM access. Virtual On's stage briefing lasts as
+    /// long as its texture upload, which is slower on the cabinet. 0 = none.
+    u32 texture_wait = 0;
+
     /// True when shifting is two momentary buttons (shift up / shift down) on
     /// IN1 bits 0x10 and 0x20 rather than the 0x70 sequential gate. Indy 500 and
     /// Manx TT and everything inheriting from them wire it this way. The GearUp/

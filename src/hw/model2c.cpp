@@ -948,10 +948,12 @@ Model2C::Window Model2C::resolve(u32 address)
     // Plain memory, as on 2B: only the original and 2A boards decode texture RAM
     // through the halfword-packing write handler.
     if (address >= kTextureRam0 && address < kTextureRam0 + 0x200000) {
+        m_cpu.add_wait_cycles(static_cast<s32>(m_game.texture_wait));
         return window(m_texture_ram0, address - kTextureRam0, true, cpu::kBusFlagBurst,
                       Notify::TextureRam);
     }
     if (address >= kTextureRam1 && address < kTextureRam1 + 0x200000) {
+        m_cpu.add_wait_cycles(static_cast<s32>(m_game.texture_wait));
         return window(m_texture_ram1, address - kTextureRam1, true, cpu::kBusFlagBurst,
                       Notify::TextureRam);
     }
