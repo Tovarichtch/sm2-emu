@@ -271,6 +271,7 @@ private:
     /// Hide/Show is only called on a change: polling SDL_CursorVisible() every
     /// frame races the compositor re-showing the cursor on motion, which flickers.
     bool        m_cursor_hidden = false;
+    bool        m_mouse_grabbed = false;
 
     /// The present-stage placement in effect this frame, cached from draw()'s
     /// config so the crosshair and Sinden-border helpers frame the same
