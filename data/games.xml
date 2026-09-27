@@ -3604,6 +3604,132 @@
     </roms>
   </game>
 
+  <game name="powsled" board="model2b" preliminary="true">
+    <title>Power Sled</title>
+    <manufacturer>Sega</manufacturer>
+    <year>1996</year>
+
+    <inputs>
+      <input type="common"/>
+    </inputs>
+
+    <!-- MAME's powsled machine config: each rider has a right and a left
+         handlebar on the analogue mux (P1 on 1 and 3, P2 on 5 and 7; 0 and 2
+         are the motion base). P1 only here, on the triggers. -->
+    <analog>
+      <channel index="1" control="accel" rest="0x00"/>
+      <channel index="3" control="brake" rest="0x00"/>
+    </analog>
+
+    <roms>
+      <region name="maincpu" size="0x200000" stride="4" chunk="2">
+        <file name="epr-19470a.15" offset="0x000000" crc="0x8f28cc09"/>
+        <file name="epr-19471a.16" offset="0x000002" crc="0x01a013e3"/>
+      </region>
+      <region name="main_data" size="0x2000000" stride="4" chunk="2">
+        <file name="fpr-19468.11" offset="0x000000" crc="0x56fae4e2"/>
+        <file name="fpr-19469.12" offset="0x000002" crc="0x5579c922"/>
+      </region>
+      <region name="polygons" size="0x1000000" stride="4" chunk="2">
+        <file name="fpr-19455.17" offset="0x000000" crc="0x165ee345"/>
+        <file name="fpr-19456.21" offset="0x000002" crc="0xc3b2e2c5"/>
+      </region>
+      <region name="textures" size="0x800000" stride="4" chunk="2">
+        <file name="fpr-19458.27" offset="0x000000" crc="0xf24acca2"/>
+        <file name="fpr-19457.25" offset="0x000002" crc="0x79d7e6fa"/>
+      </region>
+      <region name="copro_data" size="0x800000" stride="4" chunk="2" required="false"/>
+      <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+        <file name="epr-19466.31" offset="0x000000" crc="0xc42892a5"/>
+      </region>
+      <region name="samples" size="0x800000" stride="2" chunk="2" byte_swap="true">
+        <file name="fpr-19459.32" offset="0x000000" crc="0xa424743f"/>
+      </region>
+    </roms>
+  </game>
+
+  <game name="powsledm" parent="powsled" board="model2b" preliminary="true">
+    <title>Power Sled</title>
+    <version>Main, hack of Relay</version>
+    <manufacturer>Sega</manufacturer>
+    <year>1996</year>
+
+    <inputs>
+      <input type="common"/>
+    </inputs>
+
+    <roms>
+      <region name="maincpu" size="0x200000" stride="4" chunk="2">
+        <file name="epr-19472a.15" offset="0x000000" crc="0x7a947eb7"/>
+        <file name="epr-19473a.16" offset="0x000002" crc="0x165d77ae"/>
+        <!-- MAME's init_powsledm: the Main unit was never dumped, so the Relay
+             program is switched to Main mode with node ID 0x200. -->
+        <patch offset="0x1571c" value="0x5ce81e01"/>
+        <patch offset="0x1584c" value="0x58a81989"/>
+        <patch offset="0x1585c" value="0xfffffdff"/>
+      </region>
+      <region name="main_data" size="0x2000000" stride="4" chunk="2">
+        <file name="fpr-19468.11" offset="0x000000" crc="0x56fae4e2"/>
+        <file name="fpr-19469.12" offset="0x000002" crc="0x5579c922"/>
+      </region>
+      <region name="polygons" size="0x1000000" stride="4" chunk="2">
+        <file name="fpr-19455.17" offset="0x000000" crc="0x165ee345"/>
+        <file name="fpr-19456.21" offset="0x000002" crc="0xc3b2e2c5"/>
+      </region>
+      <region name="textures" size="0x800000" stride="4" chunk="2">
+        <file name="fpr-19458.27" offset="0x000000" crc="0xf24acca2"/>
+        <file name="fpr-19457.25" offset="0x000002" crc="0x79d7e6fa"/>
+      </region>
+      <region name="copro_data" size="0x800000" stride="4" chunk="2" required="false"/>
+      <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+        <file name="epr-19467.31" offset="0x000000" crc="0x5e8b9763"/>
+      </region>
+      <region name="samples" size="0x800000" stride="2" chunk="2" byte_swap="true">
+        <file name="fpr-19460.32" offset="0x000000" crc="0x456967cc"/>
+        <file name="fpr-19461.34" offset="0x400000" crc="0x7b91d65b"/>
+      </region>
+    </roms>
+  </game>
+
+  <game name="powsledr" parent="powsled" board="model2b" preliminary="true">
+    <title>Power Sled</title>
+    <version>Relay, Revision A</version>
+    <manufacturer>Sega</manufacturer>
+    <year>1996</year>
+
+    <inputs>
+      <input type="common"/>
+    </inputs>
+
+    <roms>
+      <region name="maincpu" size="0x200000" stride="4" chunk="2">
+        <file name="epr-19472a.15" offset="0x000000" crc="0x7a947eb7"/>
+        <file name="epr-19473a.16" offset="0x000002" crc="0x165d77ae"/>
+      </region>
+      <region name="main_data" size="0x2000000" stride="4" chunk="2">
+        <file name="fpr-19468.11" offset="0x000000" crc="0x56fae4e2"/>
+        <file name="fpr-19469.12" offset="0x000002" crc="0x5579c922"/>
+      </region>
+      <region name="polygons" size="0x1000000" stride="4" chunk="2">
+        <file name="fpr-19455.17" offset="0x000000" crc="0x165ee345"/>
+        <file name="fpr-19456.21" offset="0x000002" crc="0xc3b2e2c5"/>
+      </region>
+      <region name="textures" size="0x800000" stride="4" chunk="2">
+        <file name="fpr-19458.27" offset="0x000000" crc="0xf24acca2"/>
+        <file name="fpr-19457.25" offset="0x000002" crc="0x79d7e6fa"/>
+      </region>
+      <region name="copro_data" size="0x800000" stride="4" chunk="2" required="false"/>
+      <region name="audiocpu" size="0x80000" stride="2" chunk="2" byte_swap="true">
+        <file name="epr-19467.31" offset="0x000000" crc="0x5e8b9763"/>
+      </region>
+      <region name="samples" size="0x800000" stride="2" chunk="2" byte_swap="true">
+        <file name="fpr-19460.32" offset="0x000000" crc="0x456967cc"/>
+        <file name="fpr-19461.34" offset="0x400000" crc="0x7b91d65b"/>
+      </region>
+    </roms>
+  </game>
+
+
   <game name="rascot2" board="model2c" preliminary="true">
     <title>Royal Ascot II</title>
     <manufacturer>Sega</manufacturer>

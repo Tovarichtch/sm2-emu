@@ -109,6 +109,10 @@ struct Inputs {
     /// Player 2, same layout.
     u8 in2 = 0xff;
 
+    /// An extra port some cabinets add on the I/O controller's port E. Only
+    /// Power Sled uses it: bit 1 is its "Cancel Network Check" button.
+    u8 in3 = 0xff;
+
     /// The CPU board's eight-position SW3.
     u8 dipswitches = 0xff;
 

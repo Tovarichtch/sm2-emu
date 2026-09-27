@@ -379,6 +379,8 @@ bool Model2B::init(const rom::GameSpec& game, rom::RomSet roms)
     // The link board's 16 KB is the same storage the i960 reaches at
     // 0x01a00000; the board keeps it so the access stays a burst window.
     m_comm.attach_shared(m_comm_ram);
+    // Power Sled's link frames sit at 0x180 rather than every other title's 0x1c0.
+    if (is_power_sled()) m_comm.set_frame_offset(0x180);
 
     // SHARC coprocessor: reads copro_data ROM and writes into the display list
     // buffer. The table ROM is not used by the SHARC (it had its own math).
@@ -490,6 +492,11 @@ void Model2B::reset()
 
     if (m_game.drive_board) {
         m_io.set_output(4, [this](u8 value) { drive_board_write(value); });
+    }
+
+    // Power Sled reads IN3 on port E, where other 2B cabinets have an output.
+    if (is_power_sled()) {
+        m_io.set_input(4, [this] { return m_inputs.in3; });
     }
 
     if (m_game.motion_base) {

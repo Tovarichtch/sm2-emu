@@ -344,6 +344,12 @@ private:
     [[nodiscard]] u8 io_port_c_read();
     void io_port_a_write(u8 value);
     void lamp_output_w(u8 value);
+
+    /// Any Power Sled set: the unit programs differ, the cabinet wiring does not.
+    [[nodiscard]] bool is_power_sled() const
+    {
+        return m_game.name == "powsled" || m_game.parent == "powsled";
+    }
     void drive_board_write(u8 value);
 
     /// The motion base's answer on port D, for a cabinet that has one.
