@@ -46,9 +46,6 @@ constexpr u8 kFloatingBus = 0xff;
 /// busy. MAME's threshold, and the firmware's bitstream is longer than this.
 constexpr u32 kFpgaReadyAfter = 0x1400;
 
-/// The off-screen test's border, as a fraction of an axis's declared range.
-constexpr float kBorderFraction = 0.05F;
-
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -334,9 +331,8 @@ void Model1io2::fpga_write(u8 /*value*/)
 
 u8 Model1io2::lightgun_offscreen() const
 {
-    // MAME's test: a gun within five per cent of either end of an axis counts as
-    // pointed off the screen, and the two players share one bit each. The unused
-    // bits read as ones.
+    // A gun at either end of an axis is off the screen; one bit per player, the
+    // unused bits read as ones.
     u8 data = 0xfc;
 
     const auto outside = [this](u32 axis) {
@@ -345,11 +341,8 @@ u8 Model1io2::lightgun_offscreen() const
         const u16 minimum = m_lightgun_min[axis];
         const u16 maximum = m_lightgun_max[axis];
         if (maximum <= minimum) return false;
-        const auto border =
-            static_cast<u16>(static_cast<float>(maximum - minimum) * kBorderFraction);
         const u16 value = handler();
-        return value <= static_cast<u16>(minimum + border)
-            || value >= static_cast<u16>(maximum - border);
+        return value <= minimum || value >= maximum;
     };
 
     // Axis order is P1 Y, P1 X, P2 Y, P2 X.

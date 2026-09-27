@@ -818,15 +818,10 @@ u8 Model2C::lightgun_data_read(u8 offset) const
 u8 Model2C::lightgun_offscreen_read(u8 offset) const
 {
     // Bit 0 is set while player 1 is aimed off the screen, bit 1 for player 2,
-    // which is how a game distinguishes a reload from a miss. The border comes
-    // from each axis's own calibrated travel rather than from the raster, because
-    // the gun's range and the visible area are not the same thing.
-    constexpr float kBorderFraction = 0.05f;
-
+    // which is how a game tells a reload from a miss. Only the axis ends count:
+    // aim at or past the picture's edge is clamped onto them.
     const auto offscreen = [](u16 value, const rom::LightgunAxis& axis) {
-        const int border = static_cast<int>(
-            static_cast<float>(axis.maximum - axis.minimum) * kBorderFraction);
-        return value <= axis.minimum + border || value >= axis.maximum - border;
+        return value <= axis.minimum || value >= axis.maximum;
     };
 
     u16 data = 0xfffc;
