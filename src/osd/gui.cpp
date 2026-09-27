@@ -1651,9 +1651,8 @@ void Gui::draw_crosshairs(const Input* input)
     // game is paused (settings overlay open). So player 1's crosshair would
     // freeze there. When player 1 is on the mouse fallback (no dedicated gun),
     // track the live ImGui pointer instead so the crosshair still follows the
-    // mouse in the overlay. A player with a real gun still freezes, which is
-    // correct -- its position only exists when polled.
-    const bool p1_on_mouse = input->gun_count() < 1;
+    // mouse in the overlay. A player on a gun or the pad cursor still freezes,
+    // which is correct -- its position only exists when polled.
 
     for (usize player = 0; player < aims.size(); ++player) {
         const Input::GunAim& aim = aims[player];
@@ -1662,7 +1661,7 @@ void Gui::draw_crosshairs(const Input* input)
         }
         float fx = aim.x;
         float fy = aim.y;
-        if (player == 0 && p1_on_mouse && box.width > 0.0f && box.height > 0.0f) {
+        if (player == 0 && aim.mouse && box.width > 0.0f && box.height > 0.0f) {
             // Read the pointer straight from SDL rather than io.MousePos: while
             // the settings window is focused ImGui reports a position relative to
             // that window, which would confine the crosshair to its width. SDL's

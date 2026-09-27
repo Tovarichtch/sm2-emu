@@ -202,6 +202,7 @@ public:
     /// lightgun title.
     struct GunAim {
         bool  active = false;  ///< This player is aiming a gun this frame.
+        bool  mouse  = false;  ///< Aimed by the system mouse pointer.
         float x      = 0.5f;
         float y      = 0.5f;
     };
@@ -381,9 +382,14 @@ private:
 
     /// Gun-cursor position per player, 0..1 in game-image space, for the
     /// keyboard/pad aiming fallback on gun titles (mouse/dedicated gun preferred).
-    /// Nudged by the pad right stick and keyboard arrows; starts centred.
+    /// Nudged by the pad sticks and keyboard arrows; starts centred.
     mutable std::array<float, kPlayers> m_gun_cursor_x = {0.5f, 0.5f};
     mutable std::array<float, kPlayers> m_gun_cursor_y = {0.5f, 0.5f};
+
+    /// The pad/keyboard cursor holds a player's aim until the mouse moves again.
+    mutable std::array<bool, kPlayers> m_gun_cursor_owns = {false, false};
+    mutable float                      m_gun_last_ptr_x  = -1.0f;
+    mutable float                      m_gun_last_ptr_y  = -1.0f;
 
     /// Per-device light guns from evdev, when built and present. Held by pointer
     /// so the evdev/libudev detail stays out of this header; null when no guns

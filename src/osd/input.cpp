@@ -1182,6 +1182,14 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
     GunInput p1 = from_mouse();
     GunInput p2 = from_mouse();
 
+    // Moving the mouse hands the aim back to it from the pad/keyboard cursor.
+    if (pointer.x != m_gun_last_ptr_x || pointer.y != m_gun_last_ptr_y) {
+        m_gun_cursor_owns = {false, false};
+        m_gun_last_ptr_x  = pointer.x;
+        m_gun_last_ptr_y  = pointer.y;
+    }
+    std::array<bool, kPlayers> on_mouse = {true, true};
+
 #ifdef SM2_HAVE_EVDEV
     // Gun 0 drives player 1, gun 1 player 2. A player with no gun keeps the
     // mouse (aim and buttons), so one gun plus the mouse gives two aims.
@@ -1213,10 +1221,12 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
             return gi;
         };
         if (m_guns->count() >= 1) {
-            p1 = from_gun(m_guns->gun(0), 0);
+            p1          = from_gun(m_guns->gun(0), 0);
+            on_mouse[0] = false;
         }
         if (m_guns->count() >= 2) {
-            p2 = from_gun(m_guns->gun(1), 1);
+            p2          = from_gun(m_guns->gun(1), 1);
+            on_mouse[1] = false;
         }
 
         // Recoil: pulse a gun's motor once on the trigger's press edge, keyed on
@@ -1246,17 +1256,21 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
             float dy = 0.0f;
 
             if (SDL_Gamepad* pad = pad_for(static_cast<u32>(player)); pad != nullptr) {
-                // Aim on the left stick, fire on the right trigger; the left
+                // Aim on either stick, fire on the right trigger; the left
                 // trigger is the missile (on titles that have one) or the
-                // off-screen reload otherwise. A shooter's pad layout: aiming
-                // thumb and index-finger fire.
-                const int sx = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
-                const int sy = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY);
-                if (std::abs(sx) > kStickThreshold / 2 || std::abs(sy) > kStickThreshold / 2) {
-                    dx += static_cast<float>(sx) / 32767.0f;
-                    dy += static_cast<float>(sy) / 32767.0f;
-                    active = true;
+                // off-screen reload otherwise.
+                for (const auto [ax, ay] : {std::pair{SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY},
+                                            std::pair{SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY}}) {
+                    const int sx = SDL_GetGamepadAxis(pad, ax);
+                    const int sy = SDL_GetGamepadAxis(pad, ay);
+                    if (std::abs(sx) > kStickThreshold / 2 || std::abs(sy) > kStickThreshold / 2) {
+                        dx += static_cast<float>(sx) / 32767.0f;
+                        dy += static_cast<float>(sy) / 32767.0f;
+                        active = true;
+                    }
                 }
+                dx = std::clamp(dx, -1.0f, 1.0f);
+                dy = std::clamp(dy, -1.0f, 1.0f);
                 constexpr int kTriggerPress = 8000;
                 if (SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) > kTriggerPress) {
                     gi.trigger = true;
@@ -1286,15 +1300,24 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
                 }
             }
 
-            if (!active) {
-                return;  // idle: leave the mouse/gun aim untouched.
+            if (active) {
+                if (!m_gun_cursor_owns[player]) {
+                    // Take over from wherever the mouse or gun was aiming.
+                    m_gun_cursor_x[player]   = gi.x;
+                    m_gun_cursor_y[player]   = gi.y;
+                    m_gun_cursor_owns[player] = true;
+                }
+                // ~1.5%/frame at full deflection is a controllable sweep at 57.5 Hz.
+                constexpr float kSpeed = 0.015f;
+                m_gun_cursor_x[player] = std::clamp(m_gun_cursor_x[player] + dx * kSpeed, 0.0f, 1.0f);
+                m_gun_cursor_y[player] = std::clamp(m_gun_cursor_y[player] + dy * kSpeed, 0.0f, 1.0f);
             }
-            // ~1.5%/frame at full deflection is a controllable sweep at 57.5 Hz.
-            constexpr float kSpeed = 0.015f;
-            m_gun_cursor_x[player] = std::clamp(m_gun_cursor_x[player] + dx * kSpeed, 0.0f, 1.0f);
-            m_gun_cursor_y[player] = std::clamp(m_gun_cursor_y[player] + dy * kSpeed, 0.0f, 1.0f);
-            gi.x = m_gun_cursor_x[player];
-            gi.y = m_gun_cursor_y[player];
+            if (!m_gun_cursor_owns[player]) {
+                return;  // the mouse or gun keeps the aim.
+            }
+            gi.x             = m_gun_cursor_x[player];
+            gi.y             = m_gun_cursor_y[player];
+            on_mouse[player] = false;
         };
         aim_from(0, p1);
         aim_from(1, p2);
@@ -1309,8 +1332,8 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
 #endif
     // Positional-gun titles draw their own in-game crosshair, so suppress ours
     // to avoid two overlapping reticles; the RS-422 lightgun titles do not.
-    m_gun_aims[0] = GunAim{!positional, p1.x, p1.y};
-    m_gun_aims[1] = GunAim{p2_active && !positional, p2.x, p2.y};
+    m_gun_aims[0] = GunAim{!positional, on_mouse[0], p1.x, p1.y};
+    m_gun_aims[1] = GunAim{p2_active && !positional, on_mouse[1], p2.x, p2.y};
 
     if (positional) {
         // Positional gun: the aim is an analogue axis. Scale the mouse fraction

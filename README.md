@@ -215,7 +215,7 @@ rather than by label.
 | A B X Y | Buttons 1 to 4 (also VR 1-4 on titles with view buttons) |
 | Left / right shoulder | Buttons 3/4; also gear/shift down/up on racers |
 | Left / right trigger | Brake / accelerate on driving titles |
-| Right stick | Aim on gun titles (no mouse needed) |
+| Either stick | Aim on gun titles (no mouse needed); right trigger fires, left trigger reloads |
 | Start / Back | Start / insert a coin |
 | Guide + Start / Back | Service / Test (operator menus) |
 
