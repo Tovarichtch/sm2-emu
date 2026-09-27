@@ -27,6 +27,9 @@
 
 extern "C" {
 #include <m68k.h>
+// Defined in m68kcpu.c but missing from m68k.h.
+void m68k_set_cmpild_instr_callback(void (*callback)(unsigned int, int));
+void m68k_set_rte_instr_callback(void (*callback)(void));
 }
 
 namespace sm2::cpu::m68000 {
@@ -40,6 +43,9 @@ namespace {
 sm2::cpu::Bus* g_bus = nullptr;
 const sm2::cpu::m68000::M68000* g_current = nullptr;
 bool g_musashi_inited = false;
+
+/// Point the live context's cycle tables and callbacks at this process's copies.
+void rebind_host_pointers();
 
 }  // namespace
 
@@ -204,6 +210,9 @@ void M68000::serialize(Archive& ar)
         // save/swap correctly. Never zero-fill (documented to segfault).
         g_current = nullptr;  // force make_current to actually set the context
         make_current();
+        // The blob holds host pointers from whichever process saved it.
+        rebind_host_pointers();
+        m68k_get_context(m_context.data());
         apply_irq();
     }
 }
@@ -279,6 +288,24 @@ void m68k_write_memory_32(unsigned int address, unsigned int value)
 namespace {
 int g_trace_remaining = 0;
 FILE* g_trace_file = nullptr;
+
+void trace_hook(unsigned int pc);
+
+void rebind_host_pointers()
+{
+    m68k_set_cpu_type(M68K_CPU_TYPE_68000);
+    m68k_set_int_ack_callback(nullptr);
+    m68k_set_bkpt_ack_callback(nullptr);
+    m68k_set_reset_instr_callback(nullptr);
+    m68k_set_cmpild_instr_callback(nullptr);
+    m68k_set_rte_instr_callback(nullptr);
+    m68k_set_tas_instr_callback(nullptr);
+    m68k_set_illg_instr_callback(nullptr);
+    m68k_set_trap_instr_callback(nullptr);
+    m68k_set_pc_changed_callback(nullptr);
+    m68k_set_fc_callback(nullptr);
+    m68k_set_instr_hook_callback(g_trace_remaining > 0 ? trace_hook : nullptr);
+}
 
 void trace_hook(unsigned int pc)
 {
