@@ -99,6 +99,9 @@ public:
     /// Change the state of an external interrupt line.
     void set_irq_line(int line, int state);
 
+    /// Charge wait states for a slow bus access, from a bus handler.
+    void add_wait_cycles(s32 cycles) { m_icount -= cycles; }
+
     /// Stall the current instruction and re-execute it.
     ///
     /// Called from a bus handler when the geometry coprocessor's output FIFO is

@@ -98,6 +98,8 @@ constexpr u32 kCpuControl      = 0x00e00000;  // 0x38 bytes of wait-state regist
 constexpr u32 kIrqRegs         = 0x00e80000;
 constexpr u32 kTimerRegs       = 0x00f00000;
 constexpr u32 kTileRam         = 0x01000000;  // 64 KB, mirror 0x110000
+/// Tile RAM wait states; Virtual On relies on its slow clear spanning a vblank.
+constexpr s32 kTileRamWaitCycles = 16;
 constexpr u32 kCharRam         = 0x01080000;  // 512 KB, mirror 0x100000
 constexpr u32 kPaletteRam      = 0x01800000;  // 16 KB
 constexpr u32 kColorXlat       = 0x01810000;  // 48 KB
@@ -660,6 +662,7 @@ Model2Original::Window Model2Original::resolve(u32 address)
         return window(m_buffer_ram, address & 0x1ffff, true, cpu::kBusFlagBurst);
     }
     if (in_mirrored(address, kTileRam, 0x10000, 0x110000)) {
+        m_cpu.add_wait_cycles(kTileRamWaitCycles);
         return window(m_tile_ram, address & 0xffff, true, cpu::kBusFlagBurst,
                       Notify::TileRam);
     }
