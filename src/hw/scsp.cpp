@@ -297,8 +297,10 @@ void Scsp::serialize(Archive& ar)
 	if (ar.loading() && !ar.failed()) {
 		// Re-bind each slot's LFO table/scale pointers from its (restored)
 		// registers, exactly as a register write to LFO control would.
+		m_active_slots = 0;
 		for (SCSP_SLOT& slot : m_Slots) {
 			Compute_LFO(&slot);
+			m_active_slots += slot.active ? 1 : 0;
 		}
 	}
 }
@@ -650,6 +652,8 @@ void Scsp::Compute_LFO(SCSP_SLOT *slot)
 void Scsp::StartSlot(SCSP_SLOT *slot)
 {
 	++m_stats.slot_starts;
+	if (!slot->active)
+		++m_active_slots;
 	slot->active = 1;
 	slot->cur_addr = 0;
 	slot->nxt_addr = 1 << SHIFT;
@@ -671,6 +675,8 @@ void Scsp::StopSlot(SCSP_SLOT *slot,int keyoff)
 	}
 	else
 	{
+		if (slot->active)
+			--m_active_slots;
 		slot->active = 0;
 	}
 	slot->udata.data[0] &= ~0x800;
@@ -777,6 +783,7 @@ void Scsp::init()
 		m_Slots[i].active = 0;
 		m_Slots[i].EG.state = SCSP_RELEASE;
 	}
+	m_active_slots = 0;
 
 	LFO_Init();
 	// no "pend"
@@ -1239,26 +1246,30 @@ inline s32 Scsp::UpdateSlot(SCSP_SLOT *slot)
 		step >>= SHIFT;
 	}
 
+	s32 base1 = s32(slot->cur_addr >> SHIFT);
+	s32 base2 = s32(slot->nxt_addr >> SHIFT);
+	s32 fpart = slot->cur_addr & ((1 << SHIFT) - 1);
+
+	// SCSP manual table 4.10: the X/Y average moves the read address by up to
+	// 2^MDL words at full scale, wrapped to 11 signed bits.
+	if (MDL(slot) > 4)
+	{
+		const s32 sum = m_RINGBUF[(m_BUFPTR + MDXSL(slot)) & 63] + m_RINGBUF[(m_BUFPTR + MDYSL(slot)) & 63];
+		const s32 pos = sign_extend((sum << (MDL(slot) - 4)) + fpart, 11 + SHIFT);
+		base1 += pos >> SHIFT;
+		base2 += pos >> SHIFT;
+		fpart = pos & ((1 << SHIFT) - 1);
+	}
+
 	if (PCM8B(slot))
 	{
-		addr1 = slot->cur_addr >> SHIFT;
-		addr2 = slot->nxt_addr >> SHIFT;
+		addr1 = u32(base1);
+		addr2 = u32(base2);
 	}
 	else
 	{
-		addr1 = (slot->cur_addr >> (SHIFT - 1)) & ~1;
-		addr2 = (slot->nxt_addr >> (SHIFT - 1)) & ~1;
-	}
-
-	if (MDL(slot) != 0 || MDXSL(slot) != 0 || MDYSL(slot) != 0)
-	{
-		s32 smp = (m_RINGBUF[(m_BUFPTR + MDXSL(slot)) & 63] + m_RINGBUF[(m_BUFPTR + MDYSL(slot)) & 63]) / 2;
-
-		smp <<= 0xA; // associate cycle with 1024
-		smp >>= 0x1A - MDL(slot); // ex. for MDL=0xF, sample range corresponds to +/- 64 pi (32=2^5 cycles) so shift by 11 (16-5 == 0x1A-0xF)
-		if (!PCM8B(slot)) smp <<= 1;
-
-		addr1 += smp; addr2 += smp;
+		addr1 = u32(base1) << 1;
+		addr2 = u32(base2) << 1;
 	}
 
 	if (SSCTL(slot) == 0) // External DRAM data
@@ -1268,7 +1279,6 @@ inline s32 Scsp::UpdateSlot(SCSP_SLOT *slot)
 			s8 p1 = read_byte(SA(slot) + addr1);
 			s8 p2 = read_byte(SA(slot) + addr2);
 			s32 s;
-			s32 fpart=slot->cur_addr & ((1 << SHIFT) - 1);
 			s = (int) (p1 << 8) * ((1 << SHIFT) - fpart) + (int) (p2 << 8) * fpart;
 			sample = (s >> SHIFT);
 		}
@@ -1277,7 +1287,6 @@ inline s32 Scsp::UpdateSlot(SCSP_SLOT *slot)
 			s16 p1 = read_word(SA(slot) + addr1);
 			s16 p2 = read_word(SA(slot) + addr2);
 			s32 s;
-			s32 fpart = slot->cur_addr & ((1 << SHIFT) - 1);
 			s = (int)(p1) * ((1 << SHIFT) - fpart) + (int)(p2) * fpart;
 			sample = (s >> SHIFT);
 		}
@@ -1645,17 +1654,6 @@ void Scsp::generate(s16 *output, u32 frames)
 	// NOTE: according to the manual MSLC is write only, CA, SGC and EG read only.
 	// saturn:toughtrk will hang on Human logo otherwise
 	m_latched_MSLC_data = /*(MSLC << 11) |*/ (CA << 7) | (SGC << 5) | EG;
-}
-
-u32 Scsp::active_slots() const
-{
-	u32 count = 0;
-	for (const SCSP_SLOT &slot : m_Slots)
-	{
-		if (slot.active)
-			++count;
-	}
-	return count;
 }
 
 //LFO handling

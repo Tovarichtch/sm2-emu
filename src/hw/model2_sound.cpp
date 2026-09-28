@@ -55,16 +55,18 @@ constexpr u32 kScspAddressMask = 0x000fffff;
 /// 68000 clock over host clock, exactly. 45.1584 MHz / 4 over 25 MHz reduces to
 /// 7056/15625, and 5^6 shares no factor with 2^4 * 3^2 * 7^2, so this is lowest
 /// terms and the remainder has to be carried rather than rounded away.
-/// Note: MAME applies a 1-cycle wait state to every RAM and SCSP register
-/// access, effectively halving the 68000's throughput. The numerator here
-/// accounts for that.
-constexpr u64 kCpuClockNumerator   = 3528;  // 7056 / 2
+constexpr u64 kCpuClockNumerator   = 7056;
 constexpr u64 kCpuClockDenominator = 15625;
 
-/// Sample rate over host clock, exactly: 44100/25000000 reduces to 441/250000,
-/// and 3^2 * 7^2 shares no factor with 2^4 * 5^6.
-constexpr u64 kSampleNumerator   = 441;
-constexpr u64 kSampleDenominator = 250000;
+/// The 68000 and the SCSP share the 45.1584 MHz crystal, so one 44100 Hz sample
+/// is exactly 256 68000 cycles.
+constexpr u64 kCyclesPerSample = 256;
+
+/// Wait states on a 68000 access to RAM or the SCSP: a fixed two, plus up to
+/// kContentionCycles more as the SCSP's own sample fetches take the RAM bus.
+/// The contention term is fitted to hardware captures of House of the Dead.
+constexpr u32 kBusWaitCycles    = 2;
+constexpr u32 kContentionCycles = 12;
 
 /// The SCSP is clocked at half the 45.1584 MHz crystal on the video board, which
 /// divided by 512 is 44100 Hz exactly.
@@ -138,10 +140,10 @@ void Model2Sound::reset()
     m_bank4_offset = 0x200000;
     m_bank5_offset = 0x600000;
 
-    m_cycle_debt      = 0;
-    m_cycle_overshoot = 0;
-    m_sample_debt     = 0;
-    m_counters        = Counters{};
+    m_cycle_debt   = 0;
+    m_cycle_budget = 0;
+    m_sample_phase = kCyclesPerSample;
+    m_counters     = Counters{};
     m_pending.clear();
 
     m_scsp.reset();
@@ -174,8 +176,8 @@ void Model2Sound::serialize(Archive& ar)
     ar.raw(m_bank4_offset);
     ar.raw(m_bank5_offset);
     ar.raw(m_cycle_debt);
-    ar.raw(m_cycle_overshoot);
-    ar.raw(m_sample_debt);
+    ar.raw(m_cycle_budget);
+    ar.raw(m_sample_phase);
 }
 
 void Model2Sound::run(u32 host_cycles)
@@ -188,69 +190,45 @@ void Model2Sound::run(u32 host_cycles)
         return;
     }
 
-    // Audio first, then the CPU. The SCSP's timers advance with the samples, so
-    // generating this interval's audio before running the 68000 over the same
-    // interval means a timer interrupt is visible to the program within the same
-    // slice rather than the next one. MAME gets the same effect from the other
-    // direction, by catching the stream up whenever the program touches a
-    // register.
-    generate_audio(host_cycles);
-
     m_cycle_debt += static_cast<u64>(host_cycles) * kCpuClockNumerator;
-    u64 wanted = m_cycle_debt / kCpuClockDenominator;
+    m_cycle_budget += static_cast<s64>(m_cycle_debt / kCpuClockDenominator);
     m_cycle_debt %= kCpuClockDenominator;
-
-    // Instructions are not interruptible, so the last one of a slice runs past
-    // the end of it. Left uncorrected that overshoot compounds: at one call per
-    // scanline it made the board run nearly three percent fast, which is a
-    // quarter-tone sharp and audible. Paying it back out of the next slice keeps
-    // the long-run rate exact.
-    if (m_cycle_overshoot >= wanted) {
-        m_cycle_overshoot -= wanted;
-        return;
-    }
-    wanted -= m_cycle_overshoot;
-    m_cycle_overshoot = 0;
-
-    const s32 used = m_cpu.run(static_cast<s32>(wanted));
-    if (used > 0 && static_cast<u64>(used) > wanted) {
-        m_cycle_overshoot = static_cast<u64>(used) - wanted;
-    }
-}
-
-void Model2Sound::generate_audio(u32 host_cycles)
-{
-    m_sample_debt += static_cast<u64>(host_cycles) * kSampleNumerator;
-    const u64 frames = m_sample_debt / kSampleDenominator;
-    m_sample_debt %= kSampleDenominator;
-
-    if (frames == 0) {
-        return;
-    }
 
     update_balance_gains();
 
-    // Nothing draining the buffer means a headless run. The SCSP still has to be
-    // stepped, because that is where its timers and envelopes advance, so the
-    // samples are generated and then the oldest are dropped.
+    // The 68000 runs a sample at a time with the SCSP one sample ahead, so a
+    // timer interrupts at the start of the sample it expires in and a reload
+    // counts from the next one. The sequencers' tempo depends on it.
     const usize offset = m_pending.size();
-    m_pending.resize(offset + static_cast<usize>(frames) * 2);
-    m_scsp.generate(m_pending.data() + offset, static_cast<u32>(frames));
+    while (m_cycle_budget > 0) {
+        if (m_sample_phase >= kCyclesPerSample) {
+            generate_sample();
+            m_sample_phase -= kCyclesPerSample;
+            continue;
+        }
+        const s64 slice = std::min<s64>(m_cycle_budget,
+                                        static_cast<s64>(kCyclesPerSample - m_sample_phase));
+        const s32 used = m_cpu.run(static_cast<s32>(slice));
+        m_sample_phase += static_cast<u64>(used);
+        m_cycle_budget -= used;
+    }
+    const u32 frames = static_cast<u32>((m_pending.size() - offset) / 2);
 
     // The DSB (music board, DSB titles only) runs its Z80 over the same host
     // interval and mixes its decoded MPEG audio into the frames the SCSP just
     // produced. Inert -- and free -- for the sets without one.
     if (m_dsb.present()) {
         m_dsb.run(host_cycles);
-        m_dsb.mix(m_pending.data() + offset, static_cast<u32>(frames),
-                  m_scsp.sample_rate());
+        m_dsb.mix(m_pending.data() + offset, frames, m_scsp.sample_rate());
     }
     if (m_dsb2.present()) {
         m_dsb2.run(host_cycles);
-        m_dsb2.mix(m_pending.data() + offset, static_cast<u32>(frames),
-                   m_scsp.sample_rate());
+        m_dsb2.mix(m_pending.data() + offset, frames, m_scsp.sample_rate());
     }
 
+    // Nothing draining the buffer means a headless run. The SCSP still has to be
+    // stepped, because that is where its timers and envelopes advance, so the
+    // samples are generated and then the oldest are dropped.
     const usize limit = kMaxPendingFrames * 2;
     if (m_pending.size() > limit) {
         const usize excess = m_pending.size() - limit;
@@ -258,6 +236,13 @@ void Model2Sound::generate_audio(u32 host_cycles)
         m_pending.erase(m_pending.begin(),
                         m_pending.begin() + static_cast<std::ptrdiff_t>(excess));
     }
+}
+
+void Model2Sound::generate_sample()
+{
+    const usize offset = m_pending.size();
+    m_pending.resize(offset + 2);
+    m_scsp.generate(m_pending.data() + offset, 1);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +293,15 @@ Model2Sound::Window Model2Sound::resolve(u32 address)
     return {};
 }
 
+void Model2Sound::bus_wait(u32 address)
+{
+    if (address < kRamBase + kRamSize
+        || (address >= kScspBase && address < kScspBase + kScspSize)) {
+        const u32 contention = (kContentionCycles * m_scsp.active_slots() + 16) / 32;
+        m_cpu.stall(static_cast<s32>(kBusWaitCycles + contention));
+    }
+}
+
 void Model2Sound::snd_ctrl_write(u16 value)
 {
     ++m_counters.snd_ctrl_writes;
@@ -338,6 +332,7 @@ void Model2Sound::snd_ctrl_write(u16 value)
 u16 Model2Sound::read16(u32 address)
 {
     address &= kAddressMask;
+    bus_wait(address);
 
     if (const Window window = resolve(address); window.base != nullptr) {
         if (address >= kSamplesBase) {
@@ -481,6 +476,7 @@ void Model2Sound::update_balance_gains()
 void Model2Sound::write16(u32 address, u16 value)
 {
     address &= kAddressMask;
+    bus_wait(address);
 
     if (const Window window = resolve(address); window.base != nullptr) {
         if (!window.writable) {
@@ -519,6 +515,7 @@ u8 Model2Sound::read8(u32 address)
 void Model2Sound::write8(u32 address, u8 value)
 {
     const u32 masked = address & kAddressMask;
+    bus_wait(masked);
 
     // Plain memory takes the byte directly; anything with side effects has to be
     // told which lane was driven, because a byte write to a 16-bit register must

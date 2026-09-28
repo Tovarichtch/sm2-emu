@@ -98,7 +98,7 @@ public:
     [[nodiscard]] const Stats& stats() const { return m_stats; }
 
     /// How many of the 32 slots are currently sounding.
-    [[nodiscard]] u32 active_slots() const;
+    [[nodiscard]] u32 active_slots() const { return m_active_slots; }
 
     /// Save/restore the whole chip: control registers, all 32 slots, ring
     /// buffer, IRQ/timer/MIDI/DMA state, the effects DSP and the fixed-seed RNG.
@@ -226,6 +226,7 @@ private:
     } m_udata;
 
     SCSP_SLOT m_Slots[32];
+    u32 m_active_slots = 0;  ///< Slots with active set, kept in step with them.
     s16 m_RINGBUF[128];
     u8 m_BUFPTR;
 

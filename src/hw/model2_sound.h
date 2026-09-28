@@ -164,8 +164,11 @@ private:
 
     void snd_ctrl_write(u16 value);
 
-    /// Generate the SCSP's share of `host_cycles` worth of samples.
-    void generate_audio(u32 host_cycles);
+    /// Charge the 68000 the wait state RAM and the SCSP impose on an access.
+    void bus_wait(u32 address);
+
+    /// Generate the SCSP's next sample into m_pending.
+    void generate_sample();
 
     /// Reclassify each SCSP slot from the driver's voice table and push per-slot
     /// gains into the SCSP. Runs before each generate() to track live voice
@@ -204,10 +207,13 @@ private:
 
     u64 m_cycle_debt = 0;  ///< Numerator carried between run() calls.
 
-    /// Sound cycles the last slice ran past its allowance, owed to the next one.
-    u64 m_cycle_overshoot = 0;
+    /// 68000 cycles granted but not yet run; negative once an instruction has
+    /// overrun the grant, which the next grant then pays back.
+    s64 m_cycle_budget = 0;
 
-    u64 m_sample_debt = 0;  ///< Numerator for the 44100 Hz sample clock.
+    /// How far the 68000 is into the most recently generated sample, in cycles.
+    /// Reaching kCyclesPerSample means the next sample is due.
+    u64 m_sample_phase = 0;
 
     std::vector<s16> m_pending;
 

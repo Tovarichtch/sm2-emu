@@ -112,9 +112,23 @@ s32 M68000::run(s32 cycles)
     // that is still being held has to be put back. See set_irq_line.
     apply_irq();
 
-    const s32 used = m68k_execute(cycles);
+    m_running = true;
+    m_stalled = 0;
+    const s32 used = m68k_execute(cycles) + m_stalled;
+    m_running = false;
     m_total_cycles += static_cast<u64>(used < 0 ? 0 : used);
     return used;
+}
+
+void M68000::stall(s32 cycles)
+{
+    if (!m_running) {
+        return;
+    }
+    // Shrinking the timeslice ends it that much sooner without counting towards
+    // what Musashi reports as used, so run() adds the stalls back itself.
+    m68k_modify_timeslice(-cycles);
+    m_stalled += cycles;
 }
 
 void M68000::set_irq_line(int level, bool asserted)
