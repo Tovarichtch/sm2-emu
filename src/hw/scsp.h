@@ -76,7 +76,7 @@ public:
 
     /// Per-slot output gain in 1/256 units (256 == unity), applied before both
     /// the direct-out and effect-send mixes so it scales the whole voice. All
-    /// unity leaves the mixer bit-exact. The hook for the music/SFX balancer.
+    /// unity leaves the mixer bit-exact. The hook for the per-set gain.
     void set_slot_gains(const u16 gains[32]);
 
     /// A byte arrived from the host's UART.
