@@ -22,6 +22,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace sm2::net {
@@ -87,6 +88,65 @@ private:
 
 /// Process-wide network startup/teardown (WSAStartup/WSACleanup on Windows, a
 /// no-op elsewhere). Refcounted, so safe to call in matched pairs.
+/// A non-blocking TCP server that queues text for its clients. Accepting,
+/// flushing and dropping clients all happen in poll(), so nothing blocks the
+/// caller; a client that stops reading is disconnected rather than buffered
+/// without limit.
+class TcpServer {
+public:
+    TcpServer() = default;
+    ~TcpServer();
+
+    TcpServer(const TcpServer&)            = delete;
+    TcpServer& operator=(const TcpServer&) = delete;
+
+    /// Listen on every interface at port. False on failure.
+    bool open(u16 port);
+    void close();
+    [[nodiscard]] bool valid() const { return m_listen != kInvalid; }
+
+    /// Accept waiting connections, calling on_connect(id) for each so the caller
+    /// can greet it, then flush queued text and drop closed clients.
+    template <typename OnConnect>
+    void poll(OnConnect&& on_connect)
+    {
+        while (const std::optional<u64> id = accept_one()) {
+            on_connect(*id);
+        }
+        flush();
+    }
+
+    /// Queue text for one client, or for every client.
+    void send(u64 client, std::string_view text);
+    void broadcast(std::string_view text);
+
+    [[nodiscard]] usize client_count() const { return m_clients.size(); }
+    [[nodiscard]] const std::string& last_error() const { return m_last_error; }
+
+private:
+#if defined(_WIN32)
+    using Fd                       = std::uintptr_t;
+    static constexpr Fd kInvalid   = static_cast<Fd>(~0ull);
+#else
+    using Fd                       = int;
+    static constexpr Fd kInvalid   = -1;
+#endif
+
+    struct Client {
+        u64         id = 0;
+        Fd          fd = kInvalid;
+        std::string pending;
+    };
+
+    std::optional<u64> accept_one();
+    void flush();
+
+    Fd                  m_listen  = kInvalid;
+    u64                 m_next_id = 1;
+    std::vector<Client> m_clients;
+    std::string         m_last_error;
+};
+
 bool startup();
 void shutdown();
 

@@ -335,6 +335,9 @@ public:
         return writes;
     }
 
+    /// The last value the game wrote to its lamp/coin-counter latch.
+    [[nodiscard]] u8 lamp_latch() const { return m_lamp_latch; }
+
     /// Log every access that lands outside a mapped region. Off by default.
     virtual void set_log_unmapped(bool enable) = 0;
 
@@ -366,6 +369,11 @@ protected:
     }
 
     DriveBoardWrites m_drive_board_writes;
+
+    /// Called by each board's lamp_output_w.
+    void record_lamp_latch(u8 value) { m_lamp_latch = value; }
+
+    u8 m_lamp_latch = 0;
 
     /// Zero the per-frame accumulators. Called at the top of run_frame().
     void reset_core_profile()

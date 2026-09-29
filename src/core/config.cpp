@@ -558,6 +558,18 @@ bool load_config(const std::string& path, Config* out, std::vector<std::string>*
             if (!parse_bool(value, &out->pad_rumble)) {
                 bad_value();
             }
+        } else if (key == "outputs_network") {
+            if (!parse_bool(value, &out->outputs_network)) {
+                bad_value();
+            }
+        } else if (key == "outputs_network_port") {
+            if (!parse_u32(value, &out->outputs_network_port)) {
+                bad_value();
+            }
+        } else if (key == "outputs_windows") {
+            if (!parse_bool(value, &out->outputs_windows)) {
+                bad_value();
+            }
         } else if (key == "pad_rumble_strength") {
             if (!parse_u32(value, &out->pad_rumble_strength)) {
                 bad_value();
@@ -692,6 +704,9 @@ bool load_config(const std::string& path, Config* out, std::vector<std::string>*
     out->wheel_ffb_strength    = std::min(out->wheel_ffb_strength, 100u);
     out->wheel_rumble_strength = std::min(out->wheel_rumble_strength, 100u);
     out->pad_rumble_strength = std::min(out->pad_rumble_strength, 100u);
+    if (out->outputs_network_port == 0 || out->outputs_network_port > 65535) {
+        out->outputs_network_port = 8000;
+    }
     // A sane rotation range: tight enough to be usable, and never zero (which
     // would divide by zero when scaling the steering).
     out->wheel_steer_degrees = std::clamp(out->wheel_steer_degrees, 90u, 1080u);
@@ -841,6 +856,12 @@ bool save_config(const std::string& path, const Config& config)
         << "# buzz that rises with steering angle. 0..100 percent.\n"
         << "pad_rumble = " << bool_text(config.pad_rumble) << "\n"
         << "pad_rumble_strength = " << config.pad_rumble_strength << "\n"
+        << "# Cabinet lamps and drive-board bytes for MAMEHooker, DOFLinx and\n"
+        << "# similar tools, in MAME's formats: over TCP (network) and, on\n"
+        << "# Windows, as window messages.\n"
+        << "outputs_network = " << bool_text(config.outputs_network) << "\n"
+        << "outputs_network_port = " << config.outputs_network_port << "\n"
+        << "outputs_windows = " << bool_text(config.outputs_windows) << "\n"
         << "# Your wheel's own physical rotation range (a G-series PC wheel is\n"
         << "# ~900). The cabinet's ~240 of lock is mapped onto it, so matching\n"
         << "# your wheel gives arcade-like response.\n"

@@ -35,6 +35,7 @@
 #    include <ifaddrs.h>
 #    include <net/if.h>
 #    include <netinet/in.h>
+#    include <netinet/tcp.h>
 #    include <sys/socket.h>
 #    include <unistd.h>
 #endif
@@ -314,6 +315,185 @@ bool UdpSocket::recv_from(std::vector<u8>& out)
 // ---------------------------------------------------------------------------
 // Process startup / teardown
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// TcpServer
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Largest backlog a client may build up before it is dropped.
+constexpr usize kMaxPending = 64 * 1024;
+
+#if defined(_WIN32)
+void close_fd(std::uintptr_t fd) { ::closesocket(static_cast<SOCKET>(fd)); }
+void set_nonblocking(std::uintptr_t fd)
+{
+    u_long nonblock = 1;
+    ioctlsocket(static_cast<SOCKET>(fd), FIONBIO, &nonblock);
+}
+bool would_block() { return WSAGetLastError() == WSAEWOULDBLOCK; }
+#else
+void close_fd(int fd) { ::close(fd); }
+void set_nonblocking(int fd)
+{
+    const int fl = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+}
+bool would_block()
+{
+#if EAGAIN != EWOULDBLOCK
+    if (errno == EWOULDBLOCK) return true;
+#endif
+    return errno == EAGAIN;
+}
+#endif
+
+}  // namespace
+
+TcpServer::~TcpServer()
+{
+    close();
+}
+
+bool TcpServer::open(u16 port)
+{
+    close();
+
+#if defined(_WIN32)
+    const Fd fd = static_cast<Fd>(::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
+    if (fd == static_cast<Fd>(INVALID_SOCKET)) {
+        m_last_error = last_socket_error();
+        return false;
+    }
+#else
+    const Fd fd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (fd < 0) {
+        m_last_error = last_socket_error();
+        return false;
+    }
+    // Rebind straight away after a restart instead of waiting out TIME_WAIT.
+    const int reuse = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof reuse);
+#endif
+
+    sockaddr_in addr{};
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons(port);
+    addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    if (::bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr) != 0
+        || ::listen(fd, SOMAXCONN) != 0) {
+        m_last_error = "listen *:" + std::to_string(port) + ": " + last_socket_error();
+        close_fd(fd);
+        return false;
+    }
+    set_nonblocking(fd);
+    m_listen = fd;
+    return true;
+}
+
+void TcpServer::close()
+{
+    for (Client& client : m_clients) {
+        close_fd(client.fd);
+    }
+    m_clients.clear();
+    if (m_listen != kInvalid) {
+        close_fd(m_listen);
+        m_listen = kInvalid;
+    }
+}
+
+std::optional<u64> TcpServer::accept_one()
+{
+    if (m_listen == kInvalid) {
+        return std::nullopt;
+    }
+#if defined(_WIN32)
+    const Fd fd = static_cast<Fd>(::accept(static_cast<SOCKET>(m_listen), nullptr, nullptr));
+    if (fd == static_cast<Fd>(INVALID_SOCKET)) {
+        return std::nullopt;
+    }
+#else
+    const Fd fd = ::accept(m_listen, nullptr, nullptr);
+    if (fd < 0) {
+        return std::nullopt;
+    }
+#endif
+    set_nonblocking(fd);
+    const int nodelay = 1;
+    setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&nodelay),
+               sizeof nodelay);
+    Client client;
+    client.id = m_next_id++;
+    client.fd = fd;
+    m_clients.push_back(std::move(client));
+    return m_clients.back().id;
+}
+
+void TcpServer::send(u64 client, std::string_view text)
+{
+    for (Client& c : m_clients) {
+        if (c.id == client) {
+            c.pending.append(text);
+        }
+    }
+}
+
+void TcpServer::broadcast(std::string_view text)
+{
+    for (Client& c : m_clients) {
+        c.pending.append(text);
+    }
+}
+
+void TcpServer::flush()
+{
+#if defined(MSG_NOSIGNAL)
+    constexpr int kSendFlags = MSG_NOSIGNAL;
+#else
+    constexpr int kSendFlags = 0;
+#endif
+    for (usize i = 0; i < m_clients.size();) {
+        Client& c    = m_clients[i];
+        bool    dead = false;
+
+        // Clients never need to talk to us; read and discard, which is also how
+        // a closed connection shows up.
+        char scratch[256];
+        for (;;) {
+            const auto got = ::recv(c.fd, scratch, sizeof scratch, 0);
+            if (got > 0) {
+                continue;
+            }
+            if (got == 0 || !would_block()) {
+                dead = true;
+            }
+            break;
+        }
+
+        while (!dead && !c.pending.empty()) {
+            const auto sent = ::send(c.fd, c.pending.data(),
+                                     static_cast<int>(c.pending.size()), kSendFlags);
+            if (sent > 0) {
+                c.pending.erase(0, static_cast<usize>(sent));
+            } else {
+                dead = sent < 0 && !would_block();
+                break;
+            }
+        }
+        if (c.pending.size() > kMaxPending) {
+            dead = true;
+        }
+
+        if (dead) {
+            close_fd(c.fd);
+            m_clients.erase(m_clients.begin() + static_cast<std::ptrdiff_t>(i));
+        } else {
+            ++i;
+        }
+    }
+}
 
 #if defined(_WIN32)
 

@@ -36,6 +36,7 @@
 #include "hw/model2_softrender_async.h"
 #include "hw/save_state_io.h"
 #include "osd/audio.h"
+#include "osd/outputs.h"
 #include "osd/frame_pacer.h"
 #include "osd/gui.h"
 #include "osd/input.h"
@@ -899,6 +900,9 @@ int main(int argc, char** argv)
 
     options.config.pad_rumble          = from_file.pad_rumble;
     options.config.pad_rumble_strength = from_file.pad_rumble_strength;
+    options.config.outputs_network      = from_file.outputs_network;
+    options.config.outputs_network_port = from_file.outputs_network_port;
+    options.config.outputs_windows      = from_file.outputs_windows;
 
     options.config.link_enabled        = from_file.link_enabled;
     options.config.link_local_ip       = from_file.link_local_ip;
@@ -1935,6 +1939,7 @@ int main(int argc, char** argv)
         // reported by Audio::init and otherwise ignored. Opened at the machine's
         // own 44100 Hz and left to SDL to resample.
         osd::Audio audio;
+        osd::Outputs outputs;
         if (sound_board != nullptr) {
             static_cast<void>(audio.init(sound_board->sample_rate()));
         }
@@ -2236,6 +2241,16 @@ int main(int argc, char** argv)
                 pacer.resync();
             }
 
+            outputs.configure(options.config.outputs_network,
+                              static_cast<u16>(options.config.outputs_network_port),
+                              options.config.outputs_windows);
+            if (machine_iface != nullptr && loaded.has_value()) {
+                outputs.set_game(loaded->game.name, loaded->game.parent);
+            } else {
+                outputs.set_game({}, {});
+            }
+            outputs.set_paused(effective_pause);
+
             {
                 const std::string wanted = machine_iface != nullptr && loaded.has_value()
                                                    && options.config.custom_textures
@@ -2290,8 +2305,9 @@ int main(int argc, char** argv)
                                      options.config.pad_rumble_strength);
                 input.set_present_placement(options.config.aspect_mode,
                                             options.config.scaling_method);
-                input.update_drive_board(loaded->game,
-                                         machine_iface->take_drive_board_writes().view());
+                const auto drive_writes = machine_iface->take_drive_board_writes();
+                input.update_drive_board(loaded->game, drive_writes.view());
+                outputs.update(machine_iface->lamp_latch(), drive_writes.view());
                 input.update_force_feedback(loaded->game);
                 input.update_pad_rumble(loaded->game);
                 if (options.coin_at != 0) {
@@ -2665,6 +2681,7 @@ int main(int argc, char** argv)
                 exit_code = 1;
                 break;
             }
+            outputs.poll();
 
             // Esc asked to unload the game and return to the picker. Handled
             // after the frame is submitted, mirroring the launch path below in

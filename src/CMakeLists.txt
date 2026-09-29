@@ -278,6 +278,7 @@ target_link_libraries(sm2_hw
 
 add_library(sm2_osd STATIC
     osd/audio.cpp
+    osd/outputs.cpp
     osd/drive_command.cpp
     osd/frame_pacer.cpp
     osd/gui.cpp

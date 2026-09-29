@@ -718,9 +718,8 @@ void Model2::drive_board_write(u8 value)
 
 void Model2::lamp_output_w(u8 value)
 {
-    // Coin counters and six cabinet lamps. Recorded for a future output layer;
-    // nothing in the emulator consumes it yet.
-    SM2_TRACE("model2: lamps = %02x", value);
+    // Coin counters and six cabinet lamps.
+    record_lamp_latch(value);
 }
 
 // ---------------------------------------------------------------------------
