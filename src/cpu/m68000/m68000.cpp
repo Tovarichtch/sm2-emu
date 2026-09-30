@@ -114,7 +114,9 @@ s32 M68000::run(s32 cycles)
 
     m_running = true;
     m_stalled = 0;
-    const s32 used = m68k_execute(cycles) + m_stalled;
+    // Separate statement: stall() updates m_stalled during the call.
+    const s32 executed = m68k_execute(cycles);
+    const s32 used     = executed + m_stalled;
     m_running = false;
     m_total_cycles += static_cast<u64>(used < 0 ? 0 : used);
     return used;
