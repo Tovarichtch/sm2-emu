@@ -33,7 +33,7 @@ struct Inputs;
 
 namespace sm2::osd {
 
-class EvdevGuns;
+class LightGuns;
 class WheelForce;
 
 /// The cabinet's controls, driven by gamepads and the keyboard.
@@ -391,12 +391,12 @@ private:
     mutable float                      m_gun_last_ptr_x  = -1.0f;
     mutable float                      m_gun_last_ptr_y  = -1.0f;
 
-    /// Per-device light guns from evdev, when built and present. Held by pointer
-    /// so the evdev/libudev detail stays out of this header; null when no guns
-    /// were opened, in which case the single-mouse pointer path is used.
+    /// Per-device light guns, when built and present. Held by pointer so the
+    /// platform detail stays out of this header; null when no guns were
+    /// opened, in which case the single-mouse pointer path is used.
     /// Mutable because poll() is const but must drain each gun's event queue.
-#ifdef SM2_HAVE_EVDEV
-    mutable std::unique_ptr<EvdevGuns> m_guns;
+#ifdef SM2_HAVE_LIGHTGUNS
+    mutable std::unique_ptr<LightGuns> m_guns;
 #endif
 
     /// Latest per-player aim in game-image space, for the crosshair overlay.
@@ -405,7 +405,7 @@ private:
 
     /// Recoil settings and the previous trigger level per gun, so a pulse fires
     /// once on the press edge rather than every frame the trigger is held.
-    /// Sized to EvdevGuns::kMaxGuns (which is forward-declared here) plus slack.
+    /// Sized to LightGuns::kMaxGuns (which is forward-declared here) plus slack.
     static constexpr usize kMaxGuns = 8;
     bool                             m_recoil_enabled  = true;
     u32                              m_recoil_strength = 60;

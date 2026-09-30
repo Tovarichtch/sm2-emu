@@ -1225,9 +1225,9 @@ void Gui::draw_lightgun_tab(Config& config, Input* input)
     }
     ImGui::EndDisabled();
 
-    // Dedicated light guns (recoil motors, per-device buttons) are an evdev
-    // feature, so that block is Linux-only. Elsewhere the mouse is the gun.
-#ifndef SM2_HAVE_EVDEV
+    // Dedicated light guns (recoil motors, per-device buttons) need the evdev
+    // or Raw Input backend. Without one, the mouse is the gun.
+#ifndef SM2_HAVE_LIGHTGUNS
     (void)input;
     ImGui::Separator();
     ImGui::TextWrapped(
@@ -1262,7 +1262,12 @@ void Gui::draw_lightgun_tab(Config& config, Input* input)
         ImGui::TextWrapped(
             "No dedicated light guns detected. Player 1 aims with the mouse; the "
             "left button fires and the right button reloads (shoot off screen). "
+#ifdef _WIN32
+            "Plug in guns in absolute mouse mode (GUN4IR, Sinden, AimTrak) before "
+            "launching for independent per-player aiming.");
+#else
             "Plug in guns tagged ID_INPUT_GUN for independent per-player aiming.");
+#endif
     }
 
     ImGui::Separator();
@@ -1318,7 +1323,7 @@ void Gui::draw_lightgun_tab(Config& config, Input* input)
             }
         }
     }
-#endif  // SM2_HAVE_EVDEV
+#endif  // SM2_HAVE_LIGHTGUNS
 
     ImGui::Separator();
     ImGui::TextUnformatted("Sinden border");

@@ -19,8 +19,8 @@
 #include "osd/drive_command.h"
 #include "osd/wheel_ffb.h"
 
-#ifdef SM2_HAVE_EVDEV
-#include "osd/evdev_gun.h"
+#ifdef SM2_HAVE_LIGHTGUNS
+#include "osd/light_guns.h"
 #endif
 
 #include "render/geometry.h"
@@ -331,10 +331,10 @@ bool Input::init(const WheelSettings& wheel)
         SM2_INFO("no gamepad found; the keyboard covers both players");
     }
 
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     // Open any per-device light guns. If none are present the pointer stays the
     // gun source, so this failing to find anything is not an error.
-    m_guns = std::make_unique<EvdevGuns>();
+    m_guns = std::make_unique<LightGuns>();
     if (!m_guns->init() || m_guns->count() == 0) {
         m_guns.reset();
     }
@@ -1203,12 +1203,12 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
     }
     std::array<bool, kPlayers> on_mouse = {true, true};
 
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     // Gun 0 drives player 1, gun 1 player 2. A player with no gun keeps the
     // mouse (aim and buttons), so one gun plus the mouse gives two aims.
     if (m_guns) {
         m_guns->poll();
-        const auto from_gun = [&](const EvdevGuns::Gun& g, usize player) {
+        const auto from_gun = [&](const LightGuns::Gun& g, usize player) {
             const auto& bind = m_gun_buttons[player];
             const auto held  = [&](usize role) {
                 const u32 code = bind[role];
@@ -1340,7 +1340,7 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
     // 2's crosshair only shows when a second gun is actually aiming it, so a
     // single-mouse session does not paint two overlapping crosshairs.
     bool p2_active = pad_for(1) != nullptr;  // a 2nd pad aims player 2
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     p2_active = p2_active || (m_guns && m_guns->count() >= 2);
 #endif
     // Positional-gun titles draw their own in-game crosshair, so suppress ours
@@ -2255,7 +2255,7 @@ std::vector<std::string> Input::gamepad_names() const
 
 usize Input::gun_count() const
 {
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     return m_guns ? m_guns->count() : 0;
 #else
     return 0;
@@ -2264,7 +2264,7 @@ usize Input::gun_count() const
 
 std::string Input::gun_name(usize index) const
 {
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     if (m_guns && index < m_guns->count()) {
         return m_guns->gun(index).name;
     }
@@ -2276,7 +2276,7 @@ std::string Input::gun_name(usize index) const
 
 u16 Input::gun_take_last_pressed(usize index) const
 {
-#ifdef SM2_HAVE_EVDEV
+#ifdef SM2_HAVE_LIGHTGUNS
     if (m_guns && index < m_guns->count()) {
         m_guns->poll();  // ensure fresh while the overlay is open
         return m_guns->take_last_pressed(index);

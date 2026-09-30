@@ -12,15 +12,17 @@
 // used to contribute to commercial projects or for monetary gain without the
 // express written permission of the author.
 //
-// See evdev_gun.h.
+// The Linux backend of light_guns.h.
 
-#include "osd/evdev_gun.h"
+#include "osd/light_guns.h"
 
 #include "core/log.h"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstring>
+#include <vector>
 
 #include <fcntl.h>
 #include <libudev.h>
@@ -83,14 +85,47 @@ namespace {
     return {};
 }
 
+struct Device {
+    int         fd = -1;
+    std::array<int, 2> raw_min{};    ///< ABS_X, ABS_Y minimums.
+    std::array<int, 2> raw_range{};  ///< ABS_X, ABS_Y ranges (max - min).
+    std::array<int, 2> raw{};        ///< latest raw ABS values.
+    LightGuns::Gun state;
+    /// Force feedback: the uploaded rumble effect id, or -1 if the device
+    /// has no motor or the effect could not be created. Set at strength 0
+    /// so fire_recoil can re-upload at the requested level on demand.
+    int  ff_effect = -1;
+    u32  ff_strength = 0;  ///< strength the current effect was built at.
+    u16  last_pressed = 0;  ///< most recent EV_KEY press, for GUI capture.
+};
+
 }  // namespace
 
-EvdevGuns::~EvdevGuns()
+struct LightGuns::Impl {
+    std::vector<Device> guns;
+
+    bool open_gun(const std::string& node);
+    static void read_device(Device& device);
+};
+
+LightGuns::LightGuns() : m_impl(std::make_unique<Impl>()) {}
+
+LightGuns::~LightGuns()
 {
     shutdown();
 }
 
-bool EvdevGuns::init()
+usize LightGuns::count() const
+{
+    return m_impl->guns.size();
+}
+
+const LightGuns::Gun& LightGuns::gun(usize index) const
+{
+    return m_impl->guns[index].state;
+}
+
+bool LightGuns::init()
 {
     udev* ctx = udev_new();
     if (ctx == nullptr) {
@@ -149,7 +184,7 @@ bool EvdevGuns::init()
               });
     std::string last_phys;
     for (const Candidate& c : candidates) {
-        if (m_guns.size() >= kMaxGuns) {
+        if (m_impl->guns.size() >= kMaxGuns) {
             break;
         }
         if (c.phys == last_phys) {
@@ -158,18 +193,18 @@ bool EvdevGuns::init()
         // open_gun rejects a node with no absolute axis; only count the device
         // as taken once a node actually opened, so a non-aiming node does not
         // shadow the sibling that carries the aim.
-        if (open_gun(c.node)) {
+        if (m_impl->open_gun(c.node)) {
             last_phys = c.phys;
         }
     }
 
-    if (!m_guns.empty()) {
-        SM2_INFO("evdev: opened %zu light gun(s)", m_guns.size());
+    if (!m_impl->guns.empty()) {
+        SM2_INFO("evdev: opened %zu light gun(s)", m_impl->guns.size());
     }
     return true;
 }
 
-bool EvdevGuns::open_gun(const std::string& node)
+bool LightGuns::Impl::open_gun(const std::string& node)
 {
     // Prefer read-write so a gun with a recoil motor can be driven; fall back to
     // read-only (input still works, just no recoil) if write access is denied.
@@ -236,21 +271,21 @@ bool EvdevGuns::open_gun(const std::string& node)
         }
     }
 
-    m_guns.push_back(std::move(device));
+    guns.push_back(std::move(device));
     return true;
 }
 
-bool EvdevGuns::has_recoil(usize index) const
+bool LightGuns::has_recoil(usize index) const
 {
-    return index < m_guns.size() && m_guns[index].ff_effect >= 0;
+    return index < m_impl->guns.size() && m_impl->guns[index].ff_effect >= 0;
 }
 
-void EvdevGuns::fire_recoil(usize index, u32 strength)
+void LightGuns::fire_recoil(usize index, u32 strength)
 {
-    if (index >= m_guns.size() || strength == 0) {
+    if (index >= m_impl->guns.size() || strength == 0) {
         return;
     }
-    Device& device = m_guns[index];
+    Device& device = m_impl->guns[index];
     if (device.fd < 0 || device.ff_effect < 0) {
         return;
     }
@@ -282,34 +317,34 @@ void EvdevGuns::fire_recoil(usize index, u32 strength)
     }
 }
 
-u16 EvdevGuns::take_last_pressed(usize index)
+u16 LightGuns::take_last_pressed(usize index)
 {
-    if (index >= m_guns.size()) {
+    if (index >= m_impl->guns.size()) {
         return 0;
     }
-    const u16 code = m_guns[index].last_pressed;
-    m_guns[index].last_pressed = 0;
+    const u16 code = m_impl->guns[index].last_pressed;
+    m_impl->guns[index].last_pressed = 0;
     return code;
 }
 
-void EvdevGuns::shutdown()
+void LightGuns::shutdown()
 {
-    for (Device& device : m_guns) {
+    for (Device& device : m_impl->guns) {
         if (device.fd >= 0) {
             close(device.fd);
         }
     }
-    m_guns.clear();
+    m_impl->guns.clear();
 }
 
-void EvdevGuns::poll()
+void LightGuns::poll()
 {
-    for (Device& device : m_guns) {
-        read_device(device);
+    for (Device& device : m_impl->guns) {
+        Impl::read_device(device);
     }
 }
 
-void EvdevGuns::read_device(Device& device)
+void LightGuns::Impl::read_device(Device& device)
 {
     if (device.fd < 0) {
         return;

@@ -82,6 +82,7 @@ option(SM2_BUILD_OPENGL_ES      "Build the OpenGL ES 3.1 backend (ARM)"    OFF)
 # merges all mice into one pointer, so this is the only way to tell two guns
 # apart. AUTO builds it when libudev is present and skips it otherwise; ON turns
 # a missing libudev into a hard error, OFF forces the single-mouse path.
+# Windows does the same job with Raw Input, which is always built.
 set(SM2_EVDEV "AUTO" CACHE STRING "evdev light guns via libudev: AUTO, ON or OFF")
 set_property(CACHE SM2_EVDEV PROPERTY STRINGS AUTO ON OFF)
 
