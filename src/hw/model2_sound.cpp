@@ -394,7 +394,7 @@ void Model2Sound::configure_balance(const std::string& game_name)
         {"srallyc", 739}, {"srallycb", 739}, {"srallycc", 739},
         {"srallycdx", 739}, {"srallycdxa", 739},
         {"stcc", 384}, {"stcca", 384}, {"stccb", 384}, {"stcco", 384},
-        {"topskatr", 197}, {"topskatrj", 197}, {"topskatru", 197}, {"topskatruo", 197},
+        {"topskatr", 232}, {"topskatrj", 232}, {"topskatru", 232}, {"topskatruo", 232},
         {"vcop", 321}, {"vcopa", 321},
         {"vcop2", 641},
         {"vf2", 840}, {"vf2a", 840}, {"vf2b", 840}, {"vf2o", 840},
@@ -405,10 +405,10 @@ void Model2Sound::configure_balance(const std::string& game_name)
         {"zeroguna", 2824}, {"zerogunaj", 2824},
     };
 
-    // The DSB2's music is mastered close to full scale, so it needs the same
-    // headroom as the SCSP it is summed with.
+    // Top Skater's music board, matched to arcade captures of the music against
+    // the effects.
     static const std::unordered_map<std::string, u16> kDsbGain = {
-        {"topskatr", 218}, {"topskatrj", 218}, {"topskatru", 218}, {"topskatruo", 218},
+        {"topskatr", 64}, {"topskatrj", 64}, {"topskatru", 64}, {"topskatruo", 64},
     };
     if (const auto dsb = kDsbGain.find(game_name); dsb != kDsbGain.end()) {
         m_dsb2.set_gain(dsb->second);
