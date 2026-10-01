@@ -368,42 +368,51 @@ void Model2Sound::configure_balance(const std::string& game_name)
     // hardware-accuracy claim
     static const std::unordered_map<std::string, u16> kFlatGain = {
         {"airwlkrs", 793},
-        {"bel", 1521},
+        {"bel", 902},
         {"desert", 254},
         {"doa", 500}, {"doaa", 500}, {"doaab", 500}, {"doaae", 500}, {"doab", 500},
-        {"dynabb", 3019},
-        {"dynabb97", 1296},
-        {"dynamcop", 1792}, {"dynamcopb", 1792}, {"dynamcopc", 1792},
-        {"dyndeka2", 1792}, {"dyndeka2b", 1792},
+        {"dynabb", 1751},
+        {"dynabb97", 1029},
+        {"dynamcop", 705}, {"dynamcopb", 705}, {"dynamcopc", 705},
+        {"dyndeka2", 705}, {"dyndeka2b", 705},
         {"fvipers", 403}, {"fvipersa", 403}, {"fvipersb", 403},
-        {"gunblade", 1050},
+        {"gunblade", 1000},
         {"hotd", 1400}, {"hotdo", 1400}, {"hotdp", 1100},
-        {"hpyagu98", 1275},
-        {"indy500", 2602}, {"indy500d", 2602}, {"indy500to", 2602},
-        {"lastbrnx", 2736}, {"lastbrnxj", 2736}, {"lastbrnxu", 2736},
+        {"hpyagu98", 925},
+        {"indy500", 2110}, {"indy500d", 2110}, {"indy500to", 2110},
+        {"lastbrnx", 2095}, {"lastbrnxj", 2095}, {"lastbrnxu", 2095},
         {"manxtt", 799}, {"manxttc", 799}, {"manxttdx", 799},
-        {"motoraid", 1632}, {"motoraiddx", 1632},
+        {"motoraid", 1239}, {"motoraiddx", 1239},
         {"overrev", 3892}, {"overrevb", 4022}, {"overrevba", 3852},
-        {"pltkids", 2770}, {"pltkidsa", 2770},
+        {"pltkids", 2673}, {"pltkidsa", 2673},
         {"rchase2", 745}, {"rchase2a", 745},
         {"schamp", 403}, {"sfight", 403},
-        {"segawski", 1353},
-        {"sgt24h", 6907},
-        {"skisuprg", 1323},
-        {"skytargt", 1592},
+        {"segawski", 1095},
+        {"sgt24h", 2319},
+        {"skisuprg", 953},
+        {"skytargt", 927},
         {"srallyc", 739}, {"srallycb", 739}, {"srallycc", 739},
         {"srallycdx", 739}, {"srallycdxa", 739},
         {"stcc", 384}, {"stcca", 384}, {"stccb", 384}, {"stcco", 384},
-        {"topskatr", 232}, {"topskatrj", 232}, {"topskatru", 232}, {"topskatruo", 232},
+        {"topskatr", 197}, {"topskatrj", 197}, {"topskatru", 197}, {"topskatruo", 197},
         {"vcop", 321}, {"vcopa", 321},
         {"vcop2", 641},
         {"vf2", 840}, {"vf2a", 840}, {"vf2b", 840}, {"vf2o", 840},
-        {"von", 1195}, {"vonj", 1195}, {"vonr", 1195}, {"vonu", 1195},
-        {"vstriker", 1576}, {"vstrikero", 1576},
+        {"von", 1042}, {"vonj", 1042}, {"vonr", 1042}, {"vonu", 1042},
+        {"vstriker", 899}, {"vstrikero", 899},
         {"waverunr", 1181},
-        {"zerogun", 1984}, {"zerogunj", 1984},
-        {"zeroguna", 2931}, {"zerogunaj", 2931},
+        {"zerogun", 1912}, {"zerogunj", 1912},
+        {"zeroguna", 2824}, {"zerogunaj", 2824},
     };
+
+    // The DSB2's music is mastered close to full scale, so it needs the same
+    // headroom as the SCSP it is summed with.
+    static const std::unordered_map<std::string, u16> kDsbGain = {
+        {"topskatr", 218}, {"topskatrj", 218}, {"topskatru", 218}, {"topskatruo", 218},
+    };
+    if (const auto dsb = kDsbGain.find(game_name); dsb != kDsbGain.end()) {
+        m_dsb2.set_gain(dsb->second);
+    }
 
     const auto it = kFlatGain.find(game_name);
     if (it != kFlatGain.end()) {
