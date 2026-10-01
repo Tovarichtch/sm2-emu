@@ -62,10 +62,9 @@ constexpr u64 kCpuClockDenominator = 15625;
 /// is exactly 256 68000 cycles.
 constexpr u64 kCyclesPerSample = 256;
 
-/// Wait states on a 68000 access to RAM or the SCSP: a fixed two, plus up to
-/// kContentionCycles more as the SCSP's own sample fetches take the RAM bus.
-/// The contention term is fitted to hardware captures of House of the Dead.
-constexpr u32 kBusWaitCycles    = 2;
+/// Wait states on a 68000 access to RAM or the SCSP: up to kContentionCycles
+/// as the SCSP's own sample fetches take the RAM bus. Fitted to a board
+/// capture of House of the Dead.
 constexpr u32 kContentionCycles = 12;
 
 /// The SCSP is clocked at half the 45.1584 MHz crystal on the video board, which
@@ -298,7 +297,7 @@ void Model2Sound::bus_wait(u32 address)
     if (address < kRamBase + kRamSize
         || (address >= kScspBase && address < kScspBase + kScspSize)) {
         const u32 contention = (kContentionCycles * m_scsp.active_slots() + 16) / 32;
-        m_cpu.stall(static_cast<s32>(kBusWaitCycles + contention));
+        m_cpu.stall(static_cast<s32>(contention));
     }
 }
 
@@ -378,7 +377,7 @@ void Model2Sound::configure_balance(const std::string& game_name)
         {"dyndeka2", 1792}, {"dyndeka2b", 1792},
         {"fvipers", 403}, {"fvipersa", 403}, {"fvipersb", 403},
         {"gunblade", 1050},
-        {"hotd", 2735}, {"hotdo", 2735}, {"hotdp", 2735},
+        {"hotd", 1400}, {"hotdo", 1400}, {"hotdp", 1100},
         {"hpyagu98", 1275},
         {"indy500", 2602}, {"indy500d", 2602}, {"indy500to", 2602},
         {"lastbrnx", 2736}, {"lastbrnxj", 2736}, {"lastbrnxu", 2736},
