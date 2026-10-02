@@ -1225,6 +1225,14 @@ void Gui::draw_lightgun_tab(Config& config, Input* input)
     }
     ImGui::EndDisabled();
 
+    ImGui::Checkbox("Hide shot flash", &config.lightgun_hide_flash);
+    ImGui::SameLine();
+    ImGui::TextDisabled("(?)");
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Hide the white flash Virtua Cop, Virtua Cop 2 and\n"
+                          "House of the Dead show on each shot.");
+    }
+
     // Dedicated light guns (recoil motors, per-device buttons) need the evdev
     // or Raw Input backend. Without one, the mouse is the gun.
 #ifndef SM2_HAVE_LIGHTGUNS
