@@ -157,6 +157,9 @@ struct Device {
     HANDLE         handle = nullptr;
     LightGuns::Gun state;
     u16            last_pressed = 0;
+    /// Buttons pressed since the last poll(), so a click shorter than a frame
+    /// is still seen. One bit per kButtons entry.
+    u8             pressed_since_poll = 0;
 };
 
 }  // namespace
@@ -294,7 +297,9 @@ void LightGuns::Impl::run(HANDLE ready, bool* registered)
     RAWINPUTDEVICE rid{};
     rid.usUsagePage = 0x01;  // generic desktop
     rid.usUsage     = 0x02;  // mouse
-    rid.dwFlags     = 0;
+    // Keep receiving input when focus moves, so a button release is not lost
+    // and left held.
+    rid.dwFlags     = RIDEV_INPUTSINK;
     rid.hwndTarget  = window;
     *registered = window != nullptr && RegisterRawInputDevices(&rid, 1, sizeof rid);
     const bool ok = *registered;
@@ -369,12 +374,14 @@ void LightGuns::Impl::read_input(HRAWINPUT input)
         device.state.x = std::clamp(x, 0.0f, 1.0f);
         device.state.y = std::clamp(y, 0.0f, 1.0f);
     }
-    for (const ButtonBit& b : kButtons) {
+    for (usize i = 0; i < kButtons.size(); ++i) {
+        const ButtonBit& b = kButtons[i];
         if ((mouse.usButtonFlags & b.down) != 0) {
             if (!device.state.pressed[b.code]) {
                 device.last_pressed = b.code;  // rising edge
             }
             device.state.pressed[b.code] = true;
+            device.pressed_since_poll |= static_cast<u8>(1u << i);
         }
         if ((mouse.usButtonFlags & b.up) != 0) {
             device.state.pressed[b.code] = false;
@@ -387,13 +394,16 @@ void LightGuns::poll()
     // Copy only what changes, so the name and button map are never reallocated.
     std::lock_guard lock(m_impl->mutex);
     for (usize i = 0; i < m_impl->published.size(); ++i) {
-        LightGuns::Gun&       out = m_impl->published[i];
-        const LightGuns::Gun& in  = m_impl->guns[i].state;
-        out.x = in.x;
-        out.y = in.y;
-        for (const ButtonBit& b : kButtons) {
-            out.pressed[b.code] = in.pressed.at(b.code);
+        LightGuns::Gun& out    = m_impl->published[i];
+        Device&         device = m_impl->guns[i];
+        out.x = device.state.x;
+        out.y = device.state.y;
+        for (usize b = 0; b < kButtons.size(); ++b) {
+            const u16 code = kButtons[b].code;
+            out.pressed[code] = device.state.pressed.at(code)
+                                || (device.pressed_since_poll & (1u << b)) != 0;
         }
+        device.pressed_since_poll = 0;
     }
 }
 

@@ -251,6 +251,11 @@ public:
         m_present_method = method;
     }
 
+    /// Whether the Sinden border is drawn. A gun aiming against that border
+    /// reports positions on the game image; any other gun reports positions on
+    /// the whole screen.
+    void set_sinden_border(bool on) { m_sinden_border = on; }
+
     /// Bits to pull low on each port at a given frame, for unattended testing.
     struct ScriptedPress {
         u8 in0 = 0;  ///< Coins, start, service, test.
@@ -433,6 +438,7 @@ private:
     /// Present placement in effect, for the gun/pointer letterbox mapping.
     AspectMode    m_present_aspect = AspectMode::FourThree;
     ScalingMethod m_present_method = ScalingMethod::SharpBilinear;
+    bool          m_sinden_border  = false;
 
     bool             m_started = false;
 };

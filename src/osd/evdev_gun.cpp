@@ -97,6 +97,9 @@ struct Device {
     int  ff_effect = -1;
     u32  ff_strength = 0;  ///< strength the current effect was built at.
     u16  last_pressed = 0;  ///< most recent EV_KEY press, for GUI capture.
+    /// Buttons pressed and released within one poll, reported held for that
+    /// poll so a click shorter than a frame is still seen.
+    std::vector<u16> latched;
 };
 
 }  // namespace
@@ -350,6 +353,13 @@ void LightGuns::Impl::read_device(Device& device)
         return;
     }
 
+    for (const u16 code : device.latched) {
+        device.state.pressed[code] = false;
+    }
+    device.latched.clear();
+    std::array<u16, 8> fresh{};  // buttons pressed during this poll
+    usize fresh_count = 0;
+
     // Drain the queue: one read() returns a batch of events; loop until EAGAIN.
     input_event events[64];
     for (;;) {
@@ -367,10 +377,22 @@ void LightGuns::Impl::read_device(Device& device)
                     device.raw[1] = event.value;
                 }
             } else if (event.type == EV_KEY) {
-                if (event.value != 0 && !device.state.pressed[event.code]) {
-                    device.last_pressed = event.code;  // rising edge
+                const auto fresh_end = fresh.begin() + static_cast<std::ptrdiff_t>(fresh_count);
+                if (event.value != 0) {
+                    if (!device.state.pressed[event.code]) {
+                        device.last_pressed = event.code;  // rising edge
+                    }
+                    device.state.pressed[event.code] = true;
+                    std::erase(device.latched, event.code);
+                    if (fresh_count < fresh.size()
+                        && std::find(fresh.begin(), fresh_end, event.code) == fresh_end) {
+                        fresh[fresh_count++] = event.code;
+                    }
+                } else if (std::find(fresh.begin(), fresh_end, event.code) != fresh_end) {
+                    device.latched.push_back(event.code);  // released next poll
+                } else {
+                    device.state.pressed[event.code] = false;
                 }
-                device.state.pressed[event.code] = event.value != 0;
             }
         }
     }

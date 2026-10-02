@@ -2305,6 +2305,7 @@ int main(int argc, char** argv)
                                      options.config.pad_rumble_strength);
                 input.set_present_placement(options.config.aspect_mode,
                                             options.config.scaling_method);
+                input.set_sinden_border(options.config.sinden_border);
                 const auto drive_writes = machine_iface->take_drive_board_writes();
                 input.update_drive_board(loaded->game, drive_writes.view());
                 outputs.update(machine_iface->lamp_latch(), drive_writes.view());

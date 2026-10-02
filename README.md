@@ -267,7 +267,10 @@ in the settings overlay (`F10`):
   the second is player 2. On Linux, any evdev device tagged `ID_INPUT_GUN` is
   used, and guns with a motor get recoil. Windows is covered below. A Sinden
   border is available if the gun needs one, and the mouse remains the fallback
-  aiming device on every platform.
+  aiming device on every platform. A gun calibrated to the whole screen is
+  mapped onto the game image, so no 4:3 mode is needed and shooting a side bar
+  counts as off screen. With the Sinden border on, the gun aims against that
+  border instead.
 - **Gamepad rumble** on the driving games, driven from the emulated drive board.
 
 #### Light guns on Windows
@@ -276,8 +279,8 @@ in the settings overlay (`F10`):
   "gun" or "aimtrak", which is meant to cover GUN4IR, Sinden and AimTrak guns.
 - **Mode:** the guns must be in absolute mouse mode and plugged in before
   sm2-emu starts.
-- **Aim:** the position is scaled to the whole monitor, so aim is only
-  accurate in fullscreen.
+- **Aim:** the gun's position on the monitor is mapped onto the window, so
+  aim also works windowed.
 - **Buttons:** only the five mouse buttons are read. The default coin, start
   and hat bindings do nothing, because the guns send those as keyboard or
   gamepad input.
