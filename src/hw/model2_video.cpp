@@ -53,11 +53,10 @@ Model2Video::Model2Video()
     , m_below(static_cast<usize>(kWidth) * kHeight, 0)
     , m_above(static_cast<usize>(kWidth) * kHeight, 0)
 {
-    // Bias 64, gain 51: the monitor showed nothing below a quarter scale and
-    // reached full white early. Without this the whole image is washed out.
+    // Black at 40, higher crushes shadow detail.
     for (u32 index = 0; index < 256; ++index) {
         const double raw =
-            std::max((static_cast<double>(index) - 64.0) * 255.0 / 191.0, 0.0);
+            std::max((static_cast<double>(index) - 40.0) * 255.0 / 215.0, 0.0);
         m_gamma[index] = static_cast<u8>(raw);
     }
 }
