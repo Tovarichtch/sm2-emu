@@ -1828,9 +1828,8 @@ void Input::poll(hw::Inputs* inputs, const rom::GameSpec& game) const
         }
     }
 
-    // Sega Ski Super G steers off inclining alone; the edge (swing) is held
-    // flat. Coupling the edge to the steer, as the real platform does, was tried
-    // and made turning worse on a pad.
+    // Sega Ski Super G turns hardest with inclining and swing moving together,
+    // as the platform does; their raw values run in opposite directions.
     if (is_ski) {
         usize incline_ch = inputs->analog.size();
         usize swing_ch   = inputs->analog.size();
@@ -1866,7 +1865,9 @@ void Input::poll(hw::Inputs* inputs, const rom::GameSpec& game) const
                     (snap_left == left_is_max) ? inc.maximum : inc.minimum;
             }
 
-            inputs->analog[swing_ch] = 0x80;
+            const rom::AnalogChannel& swing = game.analog[swing_ch];
+            inputs->analog[swing_ch] = static_cast<u8>(
+                swing.maximum - (inputs->analog[incline_ch] - inc.minimum));
         }
     }
 
