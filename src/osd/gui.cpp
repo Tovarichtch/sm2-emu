@@ -999,7 +999,7 @@ void Gui::draw_wheel_tab(Config& config, Input* input)
         {"Shift down", Config::WheelRole::GearDown},
         {"Test",       Config::WheelRole::Test},
         {"Service",    Config::WheelRole::Service},
-        {"Menu (F1)",  Config::WheelRole::Menu},
+        {"Menu (F10)", Config::WheelRole::Menu},
     };
 
     ImGui::BeginDisabled(!connected);
