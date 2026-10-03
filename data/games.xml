@@ -4966,7 +4966,7 @@
 
     <!-- Analogue mux wiring, from MAME's model2c_state::topskatr. -->
     <analog>
-      <channel index="0" control="curving" rest="0x80"/>
+      <channel index="0" control="curving" rest="0x80" reverse="true"/>
       <channel index="1" control="slide" rest="0x80"/>
     </analog>
 
@@ -5026,7 +5026,7 @@
 
     <!-- Analogue mux wiring, from MAME's model2c_state::topskatr. -->
     <analog>
-      <channel index="0" control="curving" rest="0x80"/>
+      <channel index="0" control="curving" rest="0x80" reverse="true"/>
       <channel index="1" control="slide" rest="0x80"/>
     </analog>
 
@@ -5086,7 +5086,7 @@
 
     <!-- Analogue mux wiring, from MAME's model2c_state::topskatr. -->
     <analog>
-      <channel index="0" control="curving" rest="0x80"/>
+      <channel index="0" control="curving" rest="0x80" reverse="true"/>
       <channel index="1" control="slide" rest="0x80"/>
     </analog>
 
@@ -5146,7 +5146,7 @@
 
     <!-- Analogue mux wiring, from MAME's model2c_state::topskatr. -->
     <analog>
-      <channel index="0" control="curving" rest="0x80"/>
+      <channel index="0" control="curving" rest="0x80" reverse="true"/>
       <channel index="1" control="slide" rest="0x80"/>
     </analog>
 
