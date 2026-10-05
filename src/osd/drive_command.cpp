@@ -24,8 +24,8 @@ DriveCommand make(Effect effect, int steps, int full_steps, bool held = false)
     return {effect, steps * kDriveFull / full_steps, held};
 }
 
-// Daytona, Indy 500 and Touring Car: effect in the high nibble, strength in
-// the low one, decoded the way the drive board's program (epr-16488) does.
+// Daytona: effect in the high nibble, strength in the low one, decoded the
+// way the drive board's program (epr-16488) does.
 //   0x1x  motor off
 //   0x2x  friction     0..7
 //   0x3x  centring     0..7; 8..15 are the same strengths with a wider deadzone
@@ -37,8 +37,7 @@ DriveCommand make(Effect effect, int steps, int full_steps, bool held = false)
 // releases the wheel. A spring is 2n + 2, reached by a ramp of two a pot step
 // from just inside its deadzone. Steps 8..15 of the other families match
 // nothing on the board and also stop the motor. 0x0x and 0x7x are the boot
-// handshake and the gain setting. Indy 500 follows each effect with two
-// parameter bytes, 0xbx then 0xax, not yet understood.
+// handshake and the gain setting.
 DriveCommand decode_daytona(u8 value)
 {
     constexpr DriveCommand kOther{Effect::Other};
@@ -63,15 +62,51 @@ DriveCommand decode_daytona(u8 value)
     }
 }
 
-// Touring Car uses Daytona's bytes but streams its pushes every frame as a
-// centring torque worked out from the car, which lags the wheel: swinging from
-// one turn into the next, it still pushes the old way and throws the wheel. So
-// only its strength is used, as a spring about the wheel's own position. It
-// idles at 1, so strength runs from 1 (none) to 7 (full).
+// Indy 500, Touring Car, OverRev and Super GT 24h share a later board program
+// (epr-18261) that keeps Daytona's layout but reads the low nibble differently:
+//   0x1x  motor off
+//   0x2x  friction     0..7
+//   0x3x  centring     0..7; 8..15 repeat them
+//   0x5x  push left    0..7, where 0 is no push
+//   0x6x  push right   0..7, where 0 is no push
+// A push fades to nothing at step 0 (Indy 500 streams 0x54, 0x53 .. 0x50 as a
+// jolt dies away), so strengths run from zero. 0x4x is not a command here.
+// 0x0x is game state, 0x7x the motor strength, and 0xax/0xbx follow each
+// effect in Indy 500 as parameters not yet understood.
+DriveCommand decode_indy(u8 value)
+{
+    constexpr DriveCommand kOther{Effect::Other};
+    constexpr int kPotStep = 256;
+    const int low = value & 0x0f;
+    const auto push = [low](Effect effect) {
+        return low == 0 ? DriveCommand{} : make(effect, low, 7);
+    };
+    switch (value & 0xf0) {
+        case 0x10: return DriveCommand{};
+        case 0x20: return make(Effect::Friction, (low & 7) + 1, 8);
+        case 0x30: {
+            DriveCommand spring = make(Effect::Spring, (low & 7) + 1, 13);
+            spring.deadzone     = 3 * kPotStep;
+            spring.ramp_from    = 2 * kPotStep;
+            spring.full_at      = 21 * kPotStep;
+            return spring;
+        }
+        case 0x50: return push(Effect::PushLeft);
+        case 0x60: return push(Effect::PushRight);
+        default:   return kOther;
+    }
+}
+
+// Touring Car streams its pushes every frame as a centring torque worked out
+// from the car, which lags the wheel: swinging from one turn into the next, it
+// still pushes the old way and throws the wheel. So only its strength is used,
+// as a spring about the wheel's own position. It idles at 1, so strength runs
+// from 1 (none) to 7 (full).
 DriveCommand decode_stcc(u8 value)
 {
-    DriveCommand command = decode_daytona(value);
-    if (command.effect == Effect::PushLeft || command.effect == Effect::PushRight) {
+    DriveCommand command = decode_indy(value);
+    const int high = value & 0xf0;
+    if (high == 0x50 || high == 0x60) {
         const int low    = value & 0x0f;
         command.effect   = Effect::Spring;
         command.strength = low <= 1 ? 0 : (low - 1) * kDriveFull / 6;
@@ -113,6 +148,7 @@ DriveCommand decode_rally(u8 value)
 DriveCommand decode_drive_command(rom::DriveProtocol protocol, u8 value)
 {
     switch (protocol) {
+        case rom::DriveProtocol::Indy:  return decode_indy(value);
         case rom::DriveProtocol::Stcc:  return decode_stcc(value);
         case rom::DriveProtocol::Rally: return decode_rally(value);
         case rom::DriveProtocol::Daytona:

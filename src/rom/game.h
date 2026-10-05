@@ -141,7 +141,8 @@ struct LightgunSpec {
 /// Which command set a title's force-feedback drive board speaks.
 enum class DriveProtocol : u8 {
     Daytona,  ///< Effect in the high nibble, strength in the low one.
-    Stcc,     ///< Daytona's bytes, but pushes are a streamed torque.
+    Indy,     ///< Daytona's layout on the later board, where push step 0 is none.
+    Stcc,     ///< Indy's bytes, but pushes are a streamed torque.
     Rally,    ///< Sega Rally's own board program.
 };
 
