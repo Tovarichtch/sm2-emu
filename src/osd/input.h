@@ -103,10 +103,12 @@ public:
         u32  steer_degrees = 270;
         u32  lock_degrees  = 240;  ///< physical rotation for full game lock.
 
-        /// Synthetic engine/road rumble (Daytona streams no continuous buzz, so
-        /// this is derived from the throttle) and its 0..100 strength.
+        /// Rumble in place of force feedback: the game's impacts, and with
+        /// `rumble_engine` an engine hum from the throttle (Daytona streams no
+        /// continuous buzz). 0..100 strength.
         bool rumble          = true;
         u32  rumble_strength = 40;
+        bool rumble_engine   = true;
 
         /// Wheel button index per cabinet role, indexed by Config::WheelRole;
         /// -1 unbinds. Set by the GUI, since numbering differs between wheels.
@@ -233,10 +235,11 @@ public:
     }
 
     /// Gamepad rumble settings, pushed from the GUI/config each frame.
-    void set_pad_rumble(bool enabled, u32 strength)
+    void set_pad_rumble(bool enabled, u32 strength, bool cornering)
     {
-        m_pad_rumble_enabled  = enabled;
-        m_pad_rumble_strength = strength;
+        m_pad_rumble_enabled   = enabled;
+        m_pad_rumble_strength  = strength;
+        m_pad_rumble_cornering = cornering;
     }
 
     /// Stick gain as a percentage, pushed from the config each frame.
@@ -489,6 +492,7 @@ private:
     int                              m_pad_rumble_hold     = 0;  ///< frames left in the burst
     bool                             m_pad_rumble_enabled  = true;
     u32                              m_pad_rumble_strength = 60;
+    bool                             m_pad_rumble_cornering = true;
     mutable std::array<bool, kMaxGuns> m_trigger_was_down{};
 
     /// Gun role -> evdev key code, per player; Sinden defaults until the config

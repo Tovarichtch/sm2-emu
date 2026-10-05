@@ -1222,7 +1222,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
     // Kept deliberately subtle: even at full strength it is a fraction of the
     // device maximum, so it reads as an engine hum rather than a jackhammer.
     if (!ffb_active && game.has_steering() && m_wheel_settings.rumble
-        && m_wheel.accel_axis >= 0) {
+        && m_wheel_settings.rumble_engine && m_wheel.accel_axis >= 0) {
         // Full strength maps to ~12% of the device max at full throttle; the
         // G923's motor is strong, so even a small sine magnitude is plenty.
         const int rmax = static_cast<int>(
@@ -1324,7 +1324,7 @@ void Input::update_pad_rumble(const rom::GameSpec& game)
 
     // Cornering load: the board's answer is a centring spring, so synthesise a buzz instead.
     int cornering = 0;
-    if (active) {
+    if (active && m_pad_rumble_cornering) {
         const int deflection = std::abs(steer);
         constexpr int kDeadzone = 7000;
         if (deflection > kDeadzone) {

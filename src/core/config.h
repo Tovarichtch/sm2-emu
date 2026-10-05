@@ -187,6 +187,10 @@ struct Config {
     /// Rumble strength, 0..100 percent.
     u32 wheel_rumble_strength = 40;
 
+    /// An added vibration that grows with the throttle, not from the game.
+    /// Off leaves only the game's impacts.
+    bool wheel_rumble_engine = true;
+
 
     /// The wheel's own physical rotation range (a G-series PC wheel is ~900).
     u32 wheel_steer_degrees = 270;
@@ -244,6 +248,10 @@ struct Config {
 
     /// Rumble strength, 0..100 percent of the pad's motor range.
     u32 pad_rumble_strength = 60;
+
+    /// An added vibration that grows with steering angle, not from the game.
+    /// Off leaves only the game's impacts.
+    bool pad_rumble_cornering = true;
 
     /// Response of a stick's travel past its deadzone, in percent. Full
     /// deflection is always full lock; under 100 the middle of the travel
