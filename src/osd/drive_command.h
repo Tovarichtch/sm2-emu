@@ -43,11 +43,13 @@ struct DriveCommand {
     int    strength = 0;  ///< 0..kDriveFull.
     /// A push the game streams continuously (a torque), rather than a jolt.
     bool   held     = false;
-    /// For a spring shaped like the board's: no force inside `deadzone`, a weak
-    /// force that grows with distance beyond it, and full strength from
-    /// `full_at` outward. Both in axis units; zero means a plain ramp.
-    int    deadzone = 0;
-    int    full_at  = 0;
+    /// For a spring shaped like the board's: no force inside `deadzone`; beyond
+    /// it a ramp of two board units a pot step, measured from `ramp_from` and
+    /// clipped at `strength`; from `full_at` outward, `strength` regardless.
+    /// All in axis units; a zero `full_at` means a plain ramp.
+    int    deadzone  = 0;
+    int    ramp_from = 0;
+    int    full_at   = 0;
     /// Sega Rally's chop setting, sent as a parameter byte. 0 turns chopping
     /// off; n chops the streamed torque with a period of 2^(n+2) board ticks.
     /// -1 means this byte does not change it.

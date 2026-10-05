@@ -253,17 +253,27 @@ u8 Input::axis_to_pedal(s16 value)
     return static_cast<u8>(std::min(scaled, 255));
 }
 
-/// Scale a 0..1 screen fraction into one lightgun axis's calibrated travel.
+/// Linux KEY_CONFIG, written out so the Windows build has it too.
+constexpr u16 kKeyConfig = 0x171;
+
+/// Scale a screen fraction into one lightgun axis's calibrated travel.
 ///
 /// The gun board is 10-bit and each title calibrates its own travel, so an edge
 /// fraction must land on that title's own min/max rather than 0 or 0x3ff, or the
-/// crosshair is misplaced and the offscreen test fires early. Both the mouse
-/// pointer and an evdev gun feed through here so the two sources agree.
+/// crosshair is misplaced and the offscreen test fires early. The axis ends mark
+/// the gun as off screen, so the picture maps one step inside them and only an
+/// aim past its edge reaches them. Both the mouse pointer and an evdev gun feed
+/// through here so the two sources agree.
 [[nodiscard]] u16 fraction_to_gun(float fraction, const rom::LightgunAxis& axis)
 {
-    const float clamped = std::clamp(fraction, 0.0f, 1.0f);
-    const float span    = static_cast<float>(axis.maximum - axis.minimum);
-    return static_cast<u16>(static_cast<float>(axis.minimum) + clamped * span + 0.5f);
+    if (fraction < 0.0f) {
+        return axis.minimum;
+    }
+    if (fraction > 1.0f) {
+        return axis.maximum;
+    }
+    const float span = static_cast<float>(axis.maximum - axis.minimum - 2);
+    return static_cast<u16>(static_cast<float>(axis.minimum + 1) + fraction * span + 0.5f);
 }
 
 [[nodiscard]] u16 mouse_to_gun(float position, int extent, const rom::LightgunAxis& axis)
@@ -902,6 +912,13 @@ void Input::update_force_feedback(const rom::GameSpec& game)
         const int velocity = deflection - m_wheel.last_deflection;
         m_wheel.last_deflection = deflection;
 
+        // The board reads the pot the game reads, so its geometry is in the
+        // game's steering units: the wheel's travel mapped onto the lock.
+        const int pot = std::clamp(
+            deflection * static_cast<int>(std::max(1u, m_wheel_settings.steer_degrees))
+                / static_cast<int>(std::max(1u, m_wheel_settings.lock_degrees)),
+            -32767, 32767);
+
         // A spring of the given strength: zero in a small deadzone, rising to full
         // strength part way to lock. Signed like the deflection.
         const auto spring = [deflection](int full) {
@@ -915,19 +932,22 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             return deflection < 0 ? -force : force;
         };
 
-        // The board's own spring. No force inside the deadzone; beyond it, the
-        // gain setting plus a little that grows with distance; from full_at
-        // outward, the step's full strength on top. Strengths are in kDriveFull
-        // units, where the board's 26 is full.
-        const auto board_spring = [deflection, ceiling](const DriveCommand& c) {
-            const int m = std::abs(deflection);
+        // The board's own spring. Nothing inside the deadzone; beyond it a ramp
+        // of two board units a pot step, clipped at the step's strength, and
+        // from full_at outward the strength regardless; on top, one unit per
+        // 16 pot steps of distance. Strengths are in kDriveFull units, where
+        // the board's 26 is full.
+        const auto board_spring = [pot, ceiling](const DriveCommand& c) {
+            constexpr int kPotStep = 256;
+            const int     m        = std::abs(pot);
             if (m <= c.deadzone) {
                 return 0;
             }
-            const int gain  = 2 * kDriveFull / 26;
-            const int reach = m * kDriveFull / (26 * 16 * 256);  // grows by one per 16 pot steps
-            const int force = ((m > c.full_at ? c.strength : gain) + reach) * ceiling / kDriveFull;
-            return deflection < 0 ? -force : force;
+            const int ramp  = 2 * (m - c.ramp_from) * kDriveFull / (26 * kPotStep);
+            const int reach = m * kDriveFull / (26 * 16 * kPotStep);
+            const int held  = m > c.full_at ? c.strength : std::min(c.strength, ramp);
+            const int force = (held + reach) * ceiling / kDriveFull;
+            return pot < 0 ? -force : force;
         };
 
         // Sega Rally's board chops a streamed torque on and off. The period is
@@ -960,9 +980,9 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             // included; apply it as sent.
             m_wheel.constant_hold = 0;
             m_wheel.constant_dir  = 0;
-            game_force = push_direction(command, deflection) * chopped(mag);
+            game_force = push_direction(command, pot) * chopped(mag);
         } else if (command.is_push()) {
-            const int dir = push_direction(command, deflection);
+            const int dir = push_direction(command, pot);
             // A push is a jolt from the road, so it also drives the vibration; a
             // change of direction is the sharpest. A sustained push is held for a
             // brief kick then decayed, as a free PC wheel would otherwise spin to
@@ -1201,8 +1221,8 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
             static_cast<u32>(pointer.width), static_cast<u32>(pointer.height),
             m_present_aspect, m_present_method);
         if (box.width > 0.0f && box.height > 0.0f) {
-            ptr_fx = std::clamp((pointer.x - box.x) / box.width, 0.0f, 1.0f);
-            ptr_fy = std::clamp((pointer.y - box.y) / box.height, 0.0f, 1.0f);
+            ptr_fx = (pointer.x - box.x) / box.width;
+            ptr_fy = (pointer.y - box.y) / box.height;
         }
     }
 
@@ -1215,17 +1235,20 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
     // button, or a gun's reload button -- forces the aim to the corner and pulls
     // the trigger.
     struct GunInput {
-        float x       = 0.5f;
-        float y       = 0.5f;
-        bool  trigger = false;
-        bool  reload  = false;
-        bool  missile = false;
-        bool  coin    = false;
-        bool  start   = false;
-        bool  up      = false;
-        bool  down    = false;
-        bool  left    = false;
-        bool  right   = false;
+        float x           = 0.5f;  ///< Fraction of the game image; outside 0..1 is off screen.
+        float y           = 0.5f;
+        float win_x       = 0.5f;  ///< Fraction of the window, for the calibration marker.
+        float win_y       = 0.5f;
+        bool  calibrating = false;
+        bool  trigger     = false;
+        bool  reload      = false;
+        bool  missile     = false;
+        bool  coin        = false;
+        bool  start       = false;
+        bool  up          = false;
+        bool  down        = false;
+        bool  left        = false;
+        bool  right       = false;
     };
     // With a Missile button (bel), right = missile; otherwise right = reload.
     const bool has_missile = game.gun_missile;
@@ -1233,6 +1256,10 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
         GunInput gi;
         gi.x = ptr_fx;
         gi.y = ptr_fy;
+        if (pointer.width > 0 && pointer.height > 0) {
+            gi.win_x = pointer.x / static_cast<float>(pointer.width);
+            gi.win_y = pointer.y / static_cast<float>(pointer.height);
+        }
         if (has_missile) {
             gi.trigger = pointer.left;
             gi.missile = pointer.right;
@@ -1261,8 +1288,9 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
 
         // A gun reports where it points on the whole screen, so map that through
         // the window onto the letterboxed image; aiming at a side bar then reads
-        // as off screen. A gun aiming against the Sinden border already reports
-        // positions on the image.
+        // as off screen. A fullscreen window is the screen; only a windowed one
+        // needs the display geometry. A gun aiming against the Sinden border
+        // already reports positions on the image.
         float screen_x = 0.0f;
         float screen_y = 0.0f;
         float screen_w = 1.0f;
@@ -1280,22 +1308,26 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
         int pix_w = 0;
         int pix_h = 0;
         if (!m_sinden_border && window != nullptr
-            && SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window), &display)
-            && SDL_GetWindowPosition(window, &win_x, &win_y)
-            && SDL_GetWindowSize(window, &win_w, &win_h)
-            && SDL_GetWindowSizeInPixels(window, &pix_w, &pix_h)
-            && win_w > 0 && win_h > 0 && display.w > 0 && display.h > 0) {
+            && SDL_GetWindowSizeInPixels(window, &pix_w, &pix_h) && pix_w > 0 && pix_h > 0) {
+            const bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+            const bool placed = fullscreen
+                || (SDL_GetDisplayBounds(SDL_GetDisplayForWindow(window), &display)
+                    && SDL_GetWindowPosition(window, &win_x, &win_y)
+                    && SDL_GetWindowSize(window, &win_w, &win_h)
+                    && win_w > 0 && win_h > 0 && display.w > 0 && display.h > 0);
             const render::Letterbox box = render::compute_letterbox(
                 static_cast<u32>(pix_w), static_cast<u32>(pix_h), m_present_aspect,
                 m_present_method);
-            if (box.width > 0.0f && box.height > 0.0f) {
-                screen_x = static_cast<float>(display.x - win_x) / static_cast<float>(win_w);
-                screen_y = static_cast<float>(display.y - win_y) / static_cast<float>(win_h);
-                screen_w = static_cast<float>(display.w) / static_cast<float>(win_w);
-                screen_h = static_cast<float>(display.h) / static_cast<float>(win_h);
-                gun_box  = {box.x / static_cast<float>(pix_w), box.y / static_cast<float>(pix_h),
-                            box.width / static_cast<float>(pix_w),
-                            box.height / static_cast<float>(pix_h)};
+            if (placed && box.width > 0.0f && box.height > 0.0f) {
+                if (!fullscreen) {
+                    screen_x = static_cast<float>(display.x - win_x) / static_cast<float>(win_w);
+                    screen_y = static_cast<float>(display.y - win_y) / static_cast<float>(win_h);
+                    screen_w = static_cast<float>(display.w) / static_cast<float>(win_w);
+                    screen_h = static_cast<float>(display.h) / static_cast<float>(win_h);
+                }
+                gun_box = {box.x / static_cast<float>(pix_w), box.y / static_cast<float>(pix_h),
+                           box.width / static_cast<float>(pix_w),
+                           box.height / static_cast<float>(pix_h)};
             }
         }
 
@@ -1306,10 +1338,17 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
                 return code != 0 && g.held(static_cast<u16>(code));
             };
             GunInput gi;
-            const float wx = screen_x + g.x * screen_w;  // 0..1 across the window
-            const float wy = screen_y + g.y * screen_h;
-            gi.x = std::clamp((wx - gun_box.x) / gun_box.width, 0.0f, 1.0f);
-            gi.y = std::clamp((wy - gun_box.y) / gun_box.height, 0.0f, 1.0f);
+            gi.win_x = screen_x + g.x * screen_w;  // 0..1 across the window
+            gi.win_y = screen_y + g.y * screen_h;
+            gi.x = (gi.win_x - gun_box.x) / gun_box.width;
+            gi.y = (gi.win_y - gun_box.y) / gun_box.height;
+            // The backends clamp the raw aim to 0..1, so a value at either end
+            // means the gun is pointing off the screen (or past the Sinden border).
+            if (g.x <= 0.0f) gi.x = -1.0f; else if (g.x >= 1.0f) gi.x = 2.0f;
+            if (g.y <= 0.0f) gi.y = -1.0f; else if (g.y >= 1.0f) gi.y = 2.0f;
+            // Batocera's gun calibrator holds KEY_CONFIG while it walks the aim
+            // through its targets, which sit on the screen, not on the image.
+            gi.calibrating = g.held(kKeyConfig);
             const bool reload = held(GrReload);
             if (has_missile) {
                 gi.trigger = held(GrTrigger);
@@ -1409,8 +1448,8 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
             if (active) {
                 if (!m_gun_cursor_owns[player]) {
                     // Take over from wherever the mouse or gun was aiming.
-                    m_gun_cursor_x[player]   = gi.x;
-                    m_gun_cursor_y[player]   = gi.y;
+                    m_gun_cursor_x[player]   = std::clamp(gi.x, 0.0f, 1.0f);
+                    m_gun_cursor_y[player]   = std::clamp(gi.y, 0.0f, 1.0f);
                     m_gun_cursor_owns[player] = true;
                 }
                 // ~1.5%/frame at full deflection is a controllable sweep at 57.5 Hz.
@@ -1438,8 +1477,12 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
 #endif
     // Positional-gun titles draw their own in-game crosshair, so suppress ours
     // to avoid two overlapping reticles; the RS-422 lightgun titles do not.
-    m_gun_aims[0] = GunAim{!positional, on_mouse[0], p1.x, p1.y};
-    m_gun_aims[1] = GunAim{p2_active && !positional, on_mouse[1], p2.x, p2.y};
+    const auto record = [](bool active, bool mouse, const GunInput& g) {
+        return GunAim{active, mouse, std::clamp(g.x, 0.0f, 1.0f), std::clamp(g.y, 0.0f, 1.0f),
+                      g.calibrating, g.win_x, g.win_y};
+    };
+    m_gun_aims[0] = record(!positional, on_mouse[0], p1);
+    m_gun_aims[1] = record(p2_active && !positional, on_mouse[1], p2);
 
     if (positional) {
         // Positional gun: the aim is an analogue axis. Scale the mouse fraction
@@ -1451,6 +1494,7 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
                 return;
             }
             const rom::AnalogChannel& c = game.analog[static_cast<usize>(idx)];
+            fraction         = std::clamp(fraction, 0.0f, 1.0f);
             const float f    = c.reverse ? 1.0f - fraction : fraction;
             const float span = static_cast<float>(c.maximum - c.minimum);
             inputs->analog[static_cast<usize>(idx)] =
@@ -1461,9 +1505,9 @@ void Input::gather_lightguns(hw::Inputs* inputs, const rom::GameSpec& game) cons
         write_channel(pos_gun_ch[2], p2.x);
         write_channel(pos_gun_ch[3], p2.y);
     } else {
-        // RS-422 lightgun: off-screen reload snaps the aim to the corner.
-        if (p1.reload) { p1.x = 0.0f; p1.y = 0.0f; }
-        if (p2.reload) { p2.x = 0.0f; p2.y = 0.0f; }
+        // RS-422 lightgun: off-screen reload snaps the aim past the corner.
+        if (p1.reload) { p1.x = -1.0f; p1.y = -1.0f; }
+        if (p2.reload) { p2.x = -1.0f; p2.y = -1.0f; }
         inputs->gun_p1x = fraction_to_gun(p1.x, spec.p1x);
         inputs->gun_p1y = fraction_to_gun(p1.y, spec.p1y);
         inputs->gun_p2x = fraction_to_gun(p2.x, spec.p2x);

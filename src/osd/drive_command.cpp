@@ -34,11 +34,12 @@ DriveCommand make(Effect effect, int steps, int full_steps, bool held = false)
 //   0x6x  push right   0..7
 // All strengths share the board's scale (0..63), including its gain setting
 // of 2. A push or kick is 12 + 2n, so even step 0 is a firm push; only 0x1x
-// releases the wheel. A spring is 2n + 2, applied in full once the wheel is
-// about a fifth of the way to lock. Steps 8..15 of the other families match
-// nothing on the board and also stop the motor. 0x0x and 0x7x are the boot
-// handshake and the gain setting. Indy 500 follows each effect with two
-// parameter bytes, 0xbx then 0xax, not yet understood.
+// releases the wheel. A spring is 2n + 2, reached by a ramp of two a pot step
+// starting just inside its deadzone, so a few steps past the deadzone it is
+// already a constant torque. Steps 8..15 of the other families match nothing
+// on the board and also stop the motor. 0x0x and 0x7x are the boot handshake
+// and the gain setting. Indy 500 follows each effect with two parameter
+// bytes, 0xbx then 0xax, not yet understood.
 DriveCommand decode_daytona(u8 value)
 {
     constexpr DriveCommand kOther{Effect::Other};
@@ -52,6 +53,7 @@ DriveCommand decode_daytona(u8 value)
         case 0x30: {
             DriveCommand spring = make(Effect::Spring, (low & 7) + 1, 13);
             spring.deadzone     = (low < 8 ? 3 : 8) * kPotStep;
+            spring.ramp_from    = (low < 8 ? 2 : 7) * kPotStep;
             spring.full_at      = (low < 8 ? 21 : 24) * kPotStep;
             return spring;
         }

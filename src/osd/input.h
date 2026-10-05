@@ -205,6 +205,11 @@ public:
         bool  mouse  = false;  ///< Aimed by the system mouse pointer.
         float x      = 0.5f;
         float y      = 0.5f;
+        /// The host tool is calibrating this gun (KEY_CONFIG held); its current
+        /// target sits at win_x/win_y, 0..1 across the window rather than the image.
+        bool  calibrating = false;
+        float win_x       = 0.5f;
+        float win_y       = 0.5f;
     };
     [[nodiscard]] const std::array<GunAim, kPlayers>& gun_aims() const { return m_gun_aims; }
 
