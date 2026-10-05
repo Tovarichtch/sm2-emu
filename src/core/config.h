@@ -199,7 +199,7 @@ struct Config {
     /// Cabinet controls a wheel button can be bound to. Buttons 1..4 are the
     /// arcade buttons, which is also where a driving cabinet's view-change / VR
     /// buttons land (e.g. Daytona's VR1..VR4). Test/Service are the operator
-    /// coin-door buttons; Menu is the emulator overlay (F1), not a machine
+    /// coin-door buttons; Menu is the emulator overlay (F10), not a machine
     /// input. Keep kCount last.
     enum class WheelRole : u32 {
         Start, Coin, Button1, Button2, Button3, Button4, GearUp, GearDown,
