@@ -48,6 +48,20 @@ constexpr u8 kUp      = Input::kUp;
 constexpr u8 kRight   = Input::kRight;
 constexpr u8 kLeft    = Input::kLeft;
 
+/// Which way a push turns the wheel: +1 left, -1 right. A kick pushes away
+/// from the centre. Like the board, it counts the wheel as right of centre
+/// once it is two steps of the 8-bit pot over, and pushes left anywhere else.
+int push_direction(const DriveCommand& command, int deflection)
+{
+    constexpr int kRightOfCentre = 2 * 256;
+    switch (command.effect) {
+        case DriveCommand::Effect::PushLeft:  return 1;
+        case DriveCommand::Effect::PushRight: return -1;
+        case DriveCommand::Effect::Kick:      return deflection > kRightOfCentre ? -1 : 1;
+        default:                              return 0;
+    }
+}
+
 // Which host axis each logical control reads. The channel a control occupies is
 // the game's business (rom::GameSpec::analog); this table is only about how a
 // gamepad stands in for the cabinet's own hardware.
@@ -839,6 +853,9 @@ void Input::update_drive_board(const rom::GameSpec& game, std::span<const u8> wr
 {
     for (const u8 value : writes) {
         const DriveCommand command = decode_drive_command(game.drive_protocol, value);
+        if (command.pulse >= 0) {
+            m_drive_pulse = command.pulse;
+        }
         if (command.effect == DriveCommand::Effect::Other) {
             continue;
         }
@@ -898,11 +915,42 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             return deflection < 0 ? -force : force;
         };
 
+        // The board's own spring. No force inside the deadzone; beyond it, the
+        // gain setting plus a little that grows with distance; from full_at
+        // outward, the step's full strength on top. Strengths are in kDriveFull
+        // units, where the board's 26 is full.
+        const auto board_spring = [deflection, ceiling](const DriveCommand& c) {
+            const int m = std::abs(deflection);
+            if (m <= c.deadzone) {
+                return 0;
+            }
+            const int gain  = 2 * kDriveFull / 26;
+            const int reach = m * kDriveFull / (26 * 16 * 256);  // grows by one per 16 pot steps
+            const int force = ((m > c.full_at ? c.strength : gain) + reach) * ceiling / kDriveFull;
+            return deflection < 0 ? -force : force;
+        };
+
+        // Sega Rally's board chops a streamed torque on and off. The period is
+        // 2^(n+2) board ticks (about a thousand ticks a second) and the torque
+        // is a quarter stronger while on. A chop faster than one frame cannot
+        // be rendered, so its average is used instead.
+        constexpr u32 kTicksPerFrame = 17;
+        m_drive_ticks += kTicksPerFrame;
+        const auto chopped = [this](int force) {
+            if (m_drive_pulse == 0) {
+                return force;
+            }
+            const u32 half_period = 1u << (m_drive_pulse + 1);
+            if (half_period < kTicksPerFrame) {
+                return force * 5 / 8;
+            }
+            return (m_drive_ticks & half_period) != 0 ? 0 : force + force / 4;
+        };
+
         // So the wheel centres in menus and attract mode too, not only once the
-        // game sends its own centring. Left out while the game streams its own
-        // spring, as it then centres the wheel itself.
-        const bool game_centres =
-            command.held && command.effect == DriveCommand::Effect::Spring;
+        // game sends its own centring. Dropped while the game's own spring is
+        // active, so that is what the player feels.
+        const bool game_centres = command.effect == DriveCommand::Effect::Spring;
         const int  baseline     = game_centres ? 0 : spring(ceiling * 3 / 4);
 
         // Positive levels push the wheel left (the output is negated).
@@ -912,9 +960,9 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             // included; apply it as sent.
             m_wheel.constant_hold = 0;
             m_wheel.constant_dir  = 0;
-            game_force = command.effect == DriveCommand::Effect::PushLeft ? mag : -mag;
+            game_force = push_direction(command, deflection) * chopped(mag);
         } else if (command.is_push()) {
-            const int dir = command.effect == DriveCommand::Effect::PushLeft ? 1 : -1;
+            const int dir = push_direction(command, deflection);
             // A push is a jolt from the road, so it also drives the vibration; a
             // change of direction is the sharpest. A sustained push is held for a
             // brief kick then decayed, as a free PC wheel would otherwise spin to
@@ -939,7 +987,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             m_wheel.constant_dir  = 0;
             switch (command.effect) {
                 case DriveCommand::Effect::Spring:
-                    game_force = spring(mag);
+                    game_force = command.full_at != 0 ? board_spring(command) : spring(mag);
                     break;
                 case DriveCommand::Effect::Friction: {
                     // Opposes the turn, full strength from this speed (axis units per frame).
@@ -947,9 +995,6 @@ void Input::update_force_feedback(const rom::GameSpec& game)
                     game_force = mag * std::clamp(velocity, -kFullSpeed, kFullSpeed) / kFullSpeed;
                     break;
                 }
-                case DriveCommand::Effect::Vibrate:
-                    rumble = mag;
-                    break;
                 default:
                     break;
             }
@@ -959,8 +1004,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
 
     // Without force feedback, the game's impacts come through as rumble instead.
     const bool ffb_active = wheel_ffb_active(game);
-    if (!ffb_active && game.has_steering() && m_wheel_settings.rumble
-        && (command.is_push() || command.effect == DriveCommand::Effect::Vibrate)) {
+    if (!ffb_active && game.has_steering() && m_wheel_settings.rumble && command.is_push()) {
         const int ceiling = static_cast<int>(
             std::clamp(m_wheel_settings.rumble_strength, 0u, 100u) * 16383 / 100);
         rumble = std::max(rumble, command.strength * ceiling / kDriveFull);
@@ -1048,36 +1092,37 @@ void Input::update_pad_rumble(const rom::GameSpec& game)
         m_pad_rumble_level = 0;
     }
 
-    // Jolts: the drive board's pushes and vibration, which are short bursts, not a held force.
+    int steer = 0;
+    if (active) {
+        if (SDL_Gamepad* pad = pad_for(0)) {
+            steer = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX);
+        }
+    }
+
+    // Jolts: the drive board's pushes, which are short bursts, not a held force.
     const DriveCommand& command = m_drive_command;
     int impact = 0;
-    if (active && command.strength > 0 && !command.held
-        && (command.is_push() || command.effect == DriveCommand::Effect::Vibrate)) {
+    if (active && command.strength > 0 && !command.held && command.is_push()) {
         // Start at a floor; a pad motor cannot render the smallest levels.
         const int min_felt = ceiling / 4;
         impact = min_felt + (ceiling - min_felt) * command.strength / kDriveFull;
 
-        if (command.is_push()) {
-            const int dir = command.effect == DriveCommand::Effect::PushLeft ? 1 : -1;
-            if (dir != m_pad_rumble_dir) {
-                impact = std::min(impact * 3 / 2, 65535);  // a flip is the sharper hit
-                m_pad_rumble_dir = dir;
-            }
+        const int dir = push_direction(command, steer);
+        if (dir != m_pad_rumble_dir) {
+            impact = std::min(impact * 3 / 2, 65535);  // a flip is the sharper hit
+            m_pad_rumble_dir = dir;
         }
     }
 
     // Cornering load: the board's answer is a centring spring, so synthesise a buzz instead.
     int cornering = 0;
     if (active) {
-        if (SDL_Gamepad* pad = pad_for(0)) {
-            const int deflection =
-                std::abs(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX));
-            constexpr int kDeadzone = 7000;
-            if (deflection > kDeadzone) {
-                constexpr int kSpan = 32767 - kDeadzone;
-                const int over = std::min(deflection - kDeadzone, kSpan);
-                cornering = (ceiling * 2 / 5) * over / kSpan;  // kept under the jolts
-            }
+        const int deflection = std::abs(steer);
+        constexpr int kDeadzone = 7000;
+        if (deflection > kDeadzone) {
+            constexpr int kSpan = 32767 - kDeadzone;
+            const int over = std::min(deflection - kDeadzone, kSpan);
+            cornering = (ceiling * 2 / 5) * over / kSpan;  // kept under the jolts
         }
     }
 

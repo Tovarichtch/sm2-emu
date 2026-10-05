@@ -416,8 +416,11 @@ private:
     bool                             m_recoil_enabled  = true;
     u32                              m_recoil_strength = 60;
 
-    /// The drive board's current force command.
+    /// The drive board's current force command, and Sega Rally's chop setting:
+    /// 0 is off, n chops the torque with a period of 2^(n+2) board ticks.
     DriveCommand                     m_drive_command;
+    int                              m_drive_pulse = 0;
+    u32                              m_drive_ticks = 0;  ///< the board's ~1 kHz tick count, advanced once per frame
 
     /// The burst currently playing, shared by every pad: one drive board, one car.
     int                              m_pad_rumble_level    = 0;
