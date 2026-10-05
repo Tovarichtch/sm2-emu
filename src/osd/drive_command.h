@@ -43,10 +43,9 @@ struct DriveCommand {
     int    strength = 0;  ///< 0..kDriveFull.
     /// A push the game streams continuously (a torque), rather than a jolt.
     bool   held     = false;
-    /// For a spring shaped like the board's: no force inside `deadzone`; beyond
-    /// it a ramp of two board units a pot step, measured from `ramp_from` and
-    /// clipped at `strength`; from `full_at` outward, `strength` regardless.
-    /// All in axis units; a zero `full_at` means a plain ramp.
+    /// The board's spring shape: nothing inside `deadzone`, then a ramp of two
+    /// board units a pot step from `ramp_from`, clipped at `strength`, which
+    /// applies regardless from `full_at`. Axis units; zero `full_at` is a plain ramp.
     int    deadzone  = 0;
     int    ramp_from = 0;
     int    full_at   = 0;

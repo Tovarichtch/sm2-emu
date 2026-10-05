@@ -898,6 +898,9 @@ void Input::update_force_feedback(const rom::GameSpec& game)
         const int ceiling = static_cast<int>(
             std::clamp(m_wheel_settings.strength, 0u, 100u) * 32767 / 100);
         const int mag = command.strength * ceiling / kDriveFull;
+        // The board's motor stiction level, added to every force it outputs.
+        constexpr int kStiction = 5 * kDriveFull / 26;
+        const int     stiction  = kStiction * ceiling / kDriveFull;
 
         // An axis that has not reported yet says nothing about where the wheel is.
         const bool steer_known =
@@ -912,8 +915,7 @@ void Input::update_force_feedback(const rom::GameSpec& game)
         const int velocity = deflection - m_wheel.last_deflection;
         m_wheel.last_deflection = deflection;
 
-        // The board reads the pot the game reads, so its geometry is in the
-        // game's steering units: the wheel's travel mapped onto the lock.
+        // The board reads the pot the game reads: wheel travel mapped onto the lock.
         const int pot = std::clamp(
             deflection * static_cast<int>(std::max(1u, m_wheel_settings.steer_degrees))
                 / static_cast<int>(std::max(1u, m_wheel_settings.lock_degrees)),
@@ -932,22 +934,30 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             return deflection < 0 ? -force : force;
         };
 
-        // The board's own spring. Nothing inside the deadzone; beyond it a ramp
-        // of two board units a pot step, clipped at the step's strength, and
-        // from full_at outward the strength regardless; on top, one unit per
-        // 16 pot steps of distance. Strengths are in kDriveFull units, where
-        // the board's 26 is full.
-        const auto board_spring = [pot, ceiling](const DriveCommand& c) {
+        // The board's own spring. Outside the deadzone: a ramp of two units a pot
+        // step from ramp_from, clipped at the step's strength, plus one unit per
+        // 16 steps of distance and the stiction level. Inside it the board keeps
+        // the stiction level in its last direction until the pot reads centre,
+        // then holds it with no direction, which brakes the motor. 26 is kDriveFull.
+        const auto board_spring = [this, pot, velocity, ceiling, stiction](const DriveCommand& c) {
             constexpr int kPotStep = 256;
             const int     m        = std::abs(pot);
-            if (m <= c.deadzone) {
-                return 0;
+            if (m > c.deadzone) {
+                m_wheel.board_dir = pot < 0 ? -1 : 1;
+                const int ramp    = 2 * (m - c.ramp_from) * kDriveFull / (26 * kPotStep);
+                const int reach   = m * kDriveFull / (26 * 16 * kPotStep);
+                const int held    = m > c.full_at ? c.strength : std::min(c.strength, ramp);
+                const int force   = (held + reach + kStiction) * ceiling / kDriveFull;
+                return pot < 0 ? -force : force;
             }
-            const int ramp  = 2 * (m - c.ramp_from) * kDriveFull / (26 * kPotStep);
-            const int reach = m * kDriveFull / (26 * 16 * kPotStep);
-            const int held  = m > c.full_at ? c.strength : std::min(c.strength, ramp);
-            const int force = (held + reach) * ceiling / kDriveFull;
-            return pot < 0 ? -force : force;
+            if (m < kPotStep) {
+                m_wheel.board_dir = 0;
+            }
+            if (m_wheel.board_dir != 0) {
+                return m_wheel.board_dir * stiction;
+            }
+            constexpr int kFullSpeed = 1024;
+            return stiction * std::clamp(velocity, -kFullSpeed, kFullSpeed) / kFullSpeed;
         };
 
         // Sega Rally's board chops a streamed torque on and off. The period is
@@ -980,7 +990,8 @@ void Input::update_force_feedback(const rom::GameSpec& game)
             // included; apply it as sent.
             m_wheel.constant_hold = 0;
             m_wheel.constant_dir  = 0;
-            game_force = push_direction(command, pot) * chopped(mag);
+            m_wheel.board_dir     = push_direction(command, pot);
+            game_force            = m_wheel.board_dir * chopped(mag);
         } else if (command.is_push()) {
             const int dir = push_direction(command, pot);
             // A push is a jolt from the road, so it also drives the vibration; a
@@ -1001,7 +1012,8 @@ void Input::update_force_feedback(const rom::GameSpec& game)
                 const int over = std::min(m_wheel.constant_hold - kFullFrames, 18);
                 scaled = mag - (mag * 9 / 10) * over / 18;
             }
-            game_force = dir * scaled;
+            m_wheel.board_dir = dir;
+            game_force        = dir * (scaled + stiction);
         } else {
             m_wheel.constant_hold = 0;
             m_wheel.constant_dir  = 0;
@@ -1012,10 +1024,12 @@ void Input::update_force_feedback(const rom::GameSpec& game)
                 case DriveCommand::Effect::Friction: {
                     // Opposes the turn, full strength from this speed (axis units per frame).
                     constexpr int kFullSpeed = 1024;
+                    m_wheel.board_dir = 0;
                     game_force = mag * std::clamp(velocity, -kFullSpeed, kFullSpeed) / kFullSpeed;
                     break;
                 }
                 default:
+                    m_wheel.board_dir = 0;
                     break;
             }
         }

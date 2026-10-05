@@ -323,6 +323,7 @@ private:
         /// not whip to the stop the way the cabinet's heavy wheel never could.
         int            constant_hold  = 0;
         int            constant_dir   = 0;  ///< sign of the held constant force.
+        int            board_dir      = 0;  ///< the drive board's last push direction, +1 left.
         int            last_deflection = 0; ///< steering position last frame, for friction.
 
         /// Axis numbers on the device. Steering is the self-centring one;
