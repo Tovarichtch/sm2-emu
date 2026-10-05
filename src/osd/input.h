@@ -242,7 +242,7 @@ public:
     /// Stick gain as a percentage, pushed from the config each frame.
     void set_pad_stick_sensitivity(u32 percent)
     {
-        m_pad_stick_gain = static_cast<float>(percent) / 100.0f;
+        m_pad_stick_response = static_cast<float>(percent) / 100.0f;
     }
 
     /// Per-player gun button bindings: the evdev key code for each GunRole,
@@ -501,7 +501,7 @@ private:
     /// Bindings per player and role, SDL's layout until the config arrives.
     std::array<std::array<s32, kPadRoles>, 2> m_pad_buttons =
         Config{}.pad_bindings;
-    float m_pad_stick_gain = 1.0f;
+    float m_pad_stick_response = 1.0f;
 
     /// Axis overrides per player and role, with invert flags and pedal buttons.
     std::array<std::array<s32, kPadAxes>, 2>  m_pad_axes        = Config{}.pad_axes;

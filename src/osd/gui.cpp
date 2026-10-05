@@ -1460,8 +1460,9 @@ void Gui::draw_gamepad_tab(Config& config, Input* input)
     ImGui::SameLine();
     ImGui::TextDisabled("(?)");
     if (ImGui::IsItemHovered()) {
-        ImGui::SetTooltip("Gain on a stick's travel past its deadzone. Under 100%% the\n"
-                          "stick never reaches full lock; over, it gets there early.");
+        ImGui::SetTooltip("Response of a stick's travel past its deadzone. Full deflection\n"
+                          "is always full lock; under 100%% the middle of the travel does\n"
+                          "less, over 100%% it does more.");
     }
 
     ImGui::Checkbox("Rumble", &config.pad_rumble);

@@ -245,8 +245,9 @@ struct Config {
     /// Rumble strength, 0..100 percent of the pad's motor range.
     u32 pad_rumble_strength = 60;
 
-    /// Gain on a stick's travel past its deadzone, in percent. Under 100 the
-    /// stick never reaches full lock; over 100 it reaches it early.
+    /// Response of a stick's travel past its deadzone, in percent. Full
+    /// deflection is always full lock; under 100 the middle of the travel
+    /// does less, over 100 it does more.
     u32 pad_stick_sensitivity = 100;
 
     /// The cabinet controls a gamepad button can be bound to. Test and Service
