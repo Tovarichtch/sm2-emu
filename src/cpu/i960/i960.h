@@ -15,6 +15,7 @@
 #include "core/types.h"
 #include "cpu/bus.h"
 
+#include <cstring>
 #include <exception>
 #include <string>
 
@@ -201,7 +202,7 @@ private:
         for (const FetchWindow& w : m_fetch) {
             if (const u32 offset = address - w.start; offset < w.limit) {
                 u32 v;
-                __builtin_memcpy(&v, w.base + offset, sizeof(v));
+                std::memcpy(&v, w.base + offset, sizeof(v));
                 return v;
             }
         }
